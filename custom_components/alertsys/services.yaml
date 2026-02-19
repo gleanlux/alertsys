@@ -1,0 +1,54 @@
+quit:
+  name: Quit alert
+  description: >-
+    Reset alerts to idle state. Only works when the alert condition is no longer
+    active. Without entity_id, quits all eligible alerts.
+  fields:
+    entity_id:
+      name: Entity
+      description: The alert entity to quit. Leave empty to quit all eligible alerts.
+      required: false
+      selector:
+        entity:
+          integration: alertsys
+
+ack:
+  name: Acknowledge alert
+  description: >-
+    Acknowledge an active alert. The alert remains active but is marked as
+    acknowledged.
+  fields:
+    entity_id:
+      name: Entity
+      description: The alert entity to acknowledge.
+      required: true
+      selector:
+        entity:
+          integration: alertsys
+
+unack:
+  name: Remove acknowledgement
+  description: >-
+    Remove acknowledgement from an active alert.
+  fields:
+    entity_id:
+      name: Entity
+      description: The alert entity to remove acknowledgement from.
+      required: true
+      selector:
+        entity:
+          integration: alertsys
+
+ack_toggle:
+  name: Toggle acknowledgement
+  description: >-
+    Toggle the acknowledgement state of an active alert. If acknowledged, it
+    becomes unacknowledged; if unacknowledged, it becomes acknowledged.
+  fields:
+    entity_id:
+      name: Entity
+      description: The alert entity to toggle acknowledgement on.
+      required: true
+      selector:
+        entity:
+          integration: alertsys

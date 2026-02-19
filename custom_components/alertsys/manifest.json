@@ -1,0 +1,11 @@
+{
+  "domain": "alertsys",
+  "name": "AlertSys",
+  "codeowners": ["@gleanlux"],
+  "config_flow": true,
+  "dependencies": ["frontend"],
+  "documentation": "https://github.com/gleanlux/ha-alertsys",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/gleanlux/ha-alertsys/issues",
+  "version": "1.0.0"
+}
