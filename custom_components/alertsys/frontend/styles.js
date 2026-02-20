@@ -157,6 +157,22 @@ export const STYLES = `
       .form-field input[type="number"].narrow {
         width: 120px;
       }
+      /* Disabled / inactive fields: visually dimmed for clarity */
+      .form-field.is-disabled {
+        opacity: 0.60;
+      }
+      .form-field input:disabled,
+      .form-field textarea:disabled,
+      .form-field select:disabled {
+        background: rgba(0,0,0,0.04);
+        color: var(--text-secondary);
+        cursor: not-allowed;
+      }
+      .form-field.is-disabled input,
+      .form-field.is-disabled textarea,
+      .form-field.is-disabled select {
+        cursor: not-allowed;
+      }
       .form-field textarea { resize: vertical; }
       .form-field input.readonly { background: rgba(0,0,0,0.04); color: var(--text-secondary); }
       .id-input-wrap {

@@ -152,19 +152,21 @@ export function renderAlertForm(panel) {
         </div>
 
         <div class="form-field">
-          <label>${esc(t("field_repeat_interval"))}</label>
-          <input type="number" id="f-notif-interval" min="0" class="narrow" value="${
-            nc.repeat_interval_sec !== undefined ? nc.repeat_interval_sec : 0
+          <label>${esc(t("field_repeat_count"))}</label>
+          <input type="number" id="f-notif-repeat-count" min="0" class="narrow" value="${
+            nc.repeat_count !== undefined ? nc.repeat_count : 0
           }" />
-          <div class="hint">${esc(t("hint_repeat_zero"))}</div>
+          <div class="hint">${esc(t("hint_repeat_count_zero"))}</div>
         </div>
 
         <div class="form-field">
-          <label>${esc(t("field_max_count"))}</label>
-          <input type="number" id="f-notif-max" min="0" class="narrow" value="${
-            nc.max_count !== undefined ? nc.max_count : 5
+          <label>${esc(t("field_repeat_interval"))}</label>
+          <input type="number" id="f-notif-interval" min="5" class="narrow" value="${
+            nc.repeat_interval_sec !== undefined
+              ? nc.repeat_interval_sec
+              : panel._notifDefaults.repeat_interval_sec
           }" />
-          <div class="hint">${esc(t("hint_max_zero"))}</div>
+          <div class="hint">${esc(t("hint_repeat_interval_min"))}</div>
         </div>
 
         <div class="form-field">
@@ -273,6 +275,53 @@ export function bindAlertForm(panel) {
     if (!notifConfig) return;
     notifConfig.style.display = notifEnabled.checked ? "block" : "none";
   });
+
+  // Notification numeric constraints:
+  // - repeat_count: 0 = no repeat (send once), must be >= 0
+  // - repeat_interval_sec: minimum 5 seconds (used only when repeat_count > 0)
+  const repeatCountInput = root.querySelector("#f-notif-repeat-count");
+  const intervalInput = root.querySelector("#f-notif-interval");
+
+  const applyRepeatUiState = () => {
+    if (!repeatCountInput || !intervalInput) return;
+    const rc = parseInt(String(repeatCountInput.value ?? "0"), 10);
+    const repeatCount = Number.isFinite(rc) ? rc : 0;
+    const disabled = repeatCount <= 0;
+    intervalInput.disabled = disabled;
+
+    // Dim the whole field (label + hint + input) when interval is inactive
+    const field = intervalInput.closest(".form-field");
+    if (field) {
+      field.classList.toggle("is-disabled", disabled);
+    }
+  };
+
+  const normalizeRepeatCount = () => {
+    if (!repeatCountInput) return;
+    const raw = String(repeatCountInput.value ?? "").trim();
+    if (!raw) return; // keep empty while typing
+    let v = parseInt(raw, 10);
+    if (!Number.isFinite(v) || v < 0) v = 0;
+    repeatCountInput.value = String(v);
+    applyRepeatUiState();
+  };
+
+  const normalizeInterval = () => {
+    if (!intervalInput || intervalInput.disabled) return;
+    const raw = String(intervalInput.value ?? "").trim();
+    if (!raw) return; // keep empty while typing
+    let v = parseInt(raw, 10);
+    if (!Number.isFinite(v) || v < 5) v = 5;
+    intervalInput.value = String(v);
+  };
+
+  repeatCountInput?.addEventListener("blur", normalizeRepeatCount);
+  repeatCountInput?.addEventListener("change", normalizeRepeatCount);
+  intervalInput?.addEventListener("blur", normalizeInterval);
+  intervalInput?.addEventListener("change", normalizeInterval);
+
+  // Initialize state on first render
+  applyRepeatUiState();
 
   // Target chips add/remove
   const targetSelect = root.querySelector("#f-notif-target-select");

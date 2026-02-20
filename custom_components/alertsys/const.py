@@ -61,4 +61,4 @@ DEFAULT_CATEGORY_NAME = "Uncategorized"
 NOTIF_DEFAULT_TITLE = "AlertSys {{ level | upper }}: {{ name }}"
 NOTIF_DEFAULT_MESSAGE = "Alert '{{ name }}' triggered"
 NOTIF_DEFAULT_RESOLVE_MESSAGE = "Alert '{{ name }}' - condition cleared"
-NOTIF_DEFAULT_REPEAT_INTERVAL_SEC = 0
+NOTIF_DEFAULT_REPEAT_INTERVAL_SEC = 60

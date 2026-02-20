@@ -31,8 +31,13 @@ NOTIFICATION_SCHEMA = {
     vol.Optional("title", default=""): str,
     vol.Optional("message", default=""): str,
     vol.Optional("data"): vol.Any(None, dict),
-    vol.Optional("repeat_interval_sec", default=NOTIF_DEFAULT_REPEAT_INTERVAL_SEC): vol.Coerce(int),
-    vol.Optional("max_count", default=5): vol.Coerce(int),
+    # repeat_count: 0 = no repeat, otherwise repeat that many additional times
+    vol.Optional("repeat_count", default=0): vol.All(vol.Coerce(int), vol.Range(min=0)),
+    # repeat_interval_sec: only used when repeat_count > 0; minimum 5 seconds
+    vol.Optional("repeat_interval_sec", default=NOTIF_DEFAULT_REPEAT_INTERVAL_SEC): vol.All(
+        vol.Coerce(int),
+        vol.Range(min=5),
+    ),
     vol.Optional("send_resolve", default=False): bool,
     vol.Optional("resolve_title", default=""): str,
     vol.Optional("resolve_message", default=""): str,

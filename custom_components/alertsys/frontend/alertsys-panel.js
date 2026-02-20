@@ -467,8 +467,12 @@ class AlertSysPanel extends HTMLElement {
       title: this.shadowRoot.querySelector("#f-notif-title")?.value || "",
       message: this.shadowRoot.querySelector("#f-notif-message")?.value || "",
       data: null,
-      repeat_interval_sec: parseInt(this.shadowRoot.querySelector("#f-notif-interval")?.value || "0", 10),
-      max_count: parseInt(this.shadowRoot.querySelector("#f-notif-max")?.value || "5", 10),
+      repeat_count: parseInt(this.shadowRoot.querySelector("#f-notif-repeat-count")?.value || "0", 10),
+      repeat_interval_sec: parseInt(
+        this.shadowRoot.querySelector("#f-notif-interval")?.value ||
+          String(this._notifDefaults?.repeat_interval_sec ?? 60),
+        10
+      ),
       send_resolve: this.shadowRoot.querySelector("#f-notif-resolve")?.checked || false,
       resolve_title: this.shadowRoot.querySelector("#f-notif-resolve-title")?.value || "",
       resolve_message: this.shadowRoot.querySelector("#f-notif-resolve-msg")?.value || "",
@@ -491,6 +495,18 @@ class AlertSysPanel extends HTMLElement {
         notification.resolve_data = JSON.parse(resolveDataStr);
       } catch (_) {
         this._showError(this._t("err_resolve_data_json"));
+        return;
+      }
+    }
+
+    // Validate numeric constraints
+    if (!Number.isFinite(notification.repeat_count) || notification.repeat_count < 0) {
+      this._showError(this._t("err_repeat_count_min"));
+      return;
+    }
+    if (notification.repeat_count > 0) {
+      if (!Number.isFinite(notification.repeat_interval_sec) || notification.repeat_interval_sec < 5) {
+        this._showError(this._t("err_repeat_interval_min"));
         return;
       }
     }

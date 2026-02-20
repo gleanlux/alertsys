@@ -301,9 +301,10 @@ class AlertEntity(RestoreEntity):
         # Send first notification immediately
         self.hass.async_create_task(self._async_send_notification())
 
-        # Start repeat timer if interval > 0
-        interval = nc.get("repeat_interval_sec", 0)
-        if interval > 0:
+         # Start repeat timer only if repeat_count > 0
+        repeat_count = nc.get("repeat_count", 0)
+        if repeat_count > 0:
+            interval = nc.get("repeat_interval_sec", 60)
             self._notif_timer_unsub = async_track_time_interval(
                 self.hass,
                 self._notif_timer_tick,
@@ -319,17 +320,18 @@ class AlertEntity(RestoreEntity):
 
         self._stop_notification_timer()
 
-        # Check if max already reached
-        max_count = nc.get("max_count", 0)
-        if max_count > 0 and self._notif_count >= max_count:
+        # Stop if already reached total sends (1 initial + repeat_count)
+        repeat_count = nc.get("repeat_count", 0)
+        max_total = 1 + repeat_count
+        if self._notif_count >= max_total:
             return
 
         # Send one immediately on resume
         self.hass.async_create_task(self._async_send_notification())
 
-        # Resume repeat timer if interval > 0
-        interval = nc.get("repeat_interval_sec", 0)
-        if interval > 0:
+        # Resume repeat timer only if repeat_count > 0 and still remaining
+        if repeat_count > 0:
+            interval = nc.get("repeat_interval_sec", 60)
             self._notif_timer_unsub = async_track_time_interval(
                 self.hass,
                 self._notif_timer_tick,
@@ -356,9 +358,9 @@ class AlertEntity(RestoreEntity):
             self._stop_notification_timer()
             return
 
-        # Stop if max count reached
-        max_count = nc.get("max_count", 0)
-        if max_count > 0 and self._notif_count >= max_count:
+        # Stop if repeat_count reached (1 initial + repeat_count)
+        repeat_count = nc.get("repeat_count", 0)
+        if self._notif_count >= 1 + repeat_count:
             self._stop_notification_timer()
             return
 
@@ -370,9 +372,9 @@ class AlertEntity(RestoreEntity):
         if not nc.get("enabled") or not nc.get("targets"):
             return
 
-        # Check max count before sending
-        max_count = nc.get("max_count", 0)
-        if max_count > 0 and self._notif_count >= max_count:
+        # Check repeat_count cap before sending (1 initial + repeat_count)
+        repeat_count = nc.get("repeat_count", 0)
+        if self._notif_count >= 1 + repeat_count:
             return
 
         title = self._render_notification_template(nc.get("title", ""))
