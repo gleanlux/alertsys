@@ -85,7 +85,15 @@ export const STYLES = `
       .alert-name { font-weight: 500; min-width: 120px; }
       .alert-condition { flex: 1; color: var(--text-secondary); font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
       .alert-condition code { background: rgba(0,0,0,0.05); padding: 2px 6px; border-radius: 3px; }
-      .alert-autoquit { font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
+      .alert-autoquit {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        color: var(--text-secondary);
+        flex-shrink: 0;
+      }
+      .alert-autoquit.is-default { opacity: 0.65; }
       .alert-menu-wrap { position: relative; flex-shrink: 0; }
       .icon-btn {
         background: none;

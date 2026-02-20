@@ -9,7 +9,7 @@ export function renderList(panel) {
   let listHtml = "";
   for (const [catId, group] of groupEntries) {
     const alertRows = (group.alerts || [])
-      .map((alert) => renderAlertRow({ alert, t, esc }))
+      .map((alert) => renderAlertRow({ alert, t, esc, autoQuitDefaults: panel._autoQuitDefaults }))
       .join("");
 
     const isEmpty = (group.alerts || []).length === 0;
