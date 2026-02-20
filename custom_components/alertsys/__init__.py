@@ -19,7 +19,6 @@ from .const import (
     LEVEL_ERROR,
     LEVEL_INFO,
     LEVEL_WARNING,
-    AlertSysEntityFeature,
     SERVICE_ACK,
     SERVICE_ACK_TOGGLE,
     SERVICE_QUIT,
@@ -178,16 +177,55 @@ def _register_services(
         }),
     )
 
-    # ack / unack / ack_toggle: entity-targeted services (alert entities only)
-    component.async_register_entity_service(
-        SERVICE_ACK, {}, "ack",
-        required_features=[AlertSysEntityFeature.ACK],
+    # ack / unack / ack_toggle: explicitly target alert entities (not counters)
+    def _resolve_alert_targets(entity_ids):
+        alerts = [e for e in component.entities if isinstance(e, AlertEntity)]
+        if isinstance(entity_ids, str):
+            entity_ids = [entity_ids]
+        return [a for a in alerts if a.entity_id in entity_ids]
+
+    @callback
+    def handle_ack(call: ServiceCall) -> None:
+        for alert in _resolve_alert_targets(call.data["entity_id"]):
+            alert.ack()
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_ACK,
+        handle_ack,
+        schema=vol.Schema({
+            vol.Required("entity_id"): vol.Any(
+                cv.entity_id, vol.All(cv.ensure_list, [cv.entity_id])
+            ),
+        }),
     )
-    component.async_register_entity_service(
-        SERVICE_UNACK, {}, "unack",
-        required_features=[AlertSysEntityFeature.ACK],
+    @callback
+    def handle_unack(call: ServiceCall) -> None:
+        for alert in _resolve_alert_targets(call.data["entity_id"]):
+            alert.unack()
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_UNACK,
+        handle_unack,
+        schema=vol.Schema({
+            vol.Required("entity_id"): vol.Any(
+                cv.entity_id, vol.All(cv.ensure_list, [cv.entity_id])
+            ),
+        }),
     )
-    component.async_register_entity_service(
-        SERVICE_ACK_TOGGLE, {}, "ack_toggle",
-        required_features=[AlertSysEntityFeature.ACK],
+    @callback
+    def handle_ack_toggle(call: ServiceCall) -> None:
+        for alert in _resolve_alert_targets(call.data["entity_id"]):
+            alert.ack_toggle()
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_ACK_TOGGLE,
+        handle_ack_toggle,
+        schema=vol.Schema({
+            vol.Required("entity_id"): vol.Any(
+                cv.entity_id, vol.All(cv.ensure_list, [cv.entity_id])
+            ),
+        }),
     )

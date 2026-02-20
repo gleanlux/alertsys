@@ -25,7 +25,6 @@ from .const import (
     ATTR_LEVEL,
     COUNTER_ENTITY_IDS,
     DOMAIN,
-    AlertSysEntityFeature,
     NOTIF_DEFAULT_MESSAGE,
     NOTIF_DEFAULT_RESOLVE_MESSAGE,
 )
@@ -38,8 +37,6 @@ _LOGGER = logging.getLogger(__name__)
 
 class AlertEntity(RestoreEntity):
     """Represents a single alert in the alertsys domain."""
-
-    _attr_supported_features = AlertSysEntityFeature.ACK
 
     def __init__(
         self,
@@ -95,6 +92,15 @@ class AlertEntity(RestoreEntity):
     @property
     def state(self) -> str:
         return str(self._active).lower()
+
+    @property
+    def icon(self) -> str:
+        icons = {
+            "info": "mdi:information-outline",
+            "warning": "mdi:alert-outline",
+            "error": "mdi:alert-circle-outline",
+        }
+        return icons.get(self._level, "mdi:alert-circle-outline")
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

@@ -1,8 +1,5 @@
 """Constants for the AlertSys integration."""
 
-from enum import IntFlag
-
-
 DOMAIN = "alertsys"
 STORAGE_KEY = f"{DOMAIN}.storage"
 STORAGE_VERSION = 1
@@ -27,13 +24,6 @@ AUTO_QUIT_DEFAULTS = {
     LEVEL_WARNING: True,
     LEVEL_ERROR: False,
 }
-
-# Supported features (for entity service filtering)
-class AlertSysEntityFeature(IntFlag):
-    """Features supported by AlertSys alert entities."""
-
-    ACK = 1
-
 
 # Entity attributes
 ATTR_CONDITION = "condition"
