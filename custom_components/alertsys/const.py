@@ -29,6 +29,7 @@ AUTO_QUIT_DEFAULTS = {
 ATTR_CONDITION = "condition"
 ATTR_ACK = "ack"
 ATTR_LEVEL = "level"
+ATTR_AUTO_QUIT = "auto_quit"
 
 # Service names
 SERVICE_QUIT = "quit"

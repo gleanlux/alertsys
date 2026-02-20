@@ -23,6 +23,7 @@ from .const import (
     ATTR_ACK,
     ATTR_CONDITION,
     ATTR_LEVEL,
+    ATTR_AUTO_QUIT,
     COUNTER_ENTITY_IDS,
     DOMAIN,
     NOTIF_DEFAULT_MESSAGE,
@@ -108,6 +109,7 @@ class AlertEntity(RestoreEntity):
             ATTR_CONDITION: self._condition_met,
             ATTR_ACK: self._ack,
             ATTR_LEVEL: self._level,
+            ATTR_AUTO_QUIT: self._auto_quit,
         }
 
     @property
