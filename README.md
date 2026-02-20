@@ -22,7 +22,7 @@ It also adds an **“Alert Manager”** panel to the HA sidebar for creating and
 - **Categories** (like HA’s built-in grouping style)
 - **Notifications**
   - Send to one or more `notify.*` targets
-  - Optional repeat interval + max count
+  - Optional repeat count and interval
   - Optional “resolve” notification when the condition clears
   - Jinja2 templates in title/message (with a test button in the UI)
 - **Counters**
