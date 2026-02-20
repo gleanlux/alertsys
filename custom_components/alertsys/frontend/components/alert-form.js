@@ -26,8 +26,8 @@ export function renderAlertForm(panel) {
 
   return `
     <div class="toolbar">
-      <button id="btn-back" class="secondary-btn">${esc(t("btn_back"))}</button>
       <h1>${esc(title)}</h1>
+      <button id="btn-back" class="secondary-btn">${esc(t("btn_back"))}</button>
     </div>
 
     <div class="form-container">

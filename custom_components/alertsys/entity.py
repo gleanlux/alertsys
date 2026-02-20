@@ -6,7 +6,8 @@ import logging
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
-from homeassistant.components.sensor import SensorEntity, SensorStateClass
+from homeassistant.components.sensor import SensorEntity
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.const import STATE_UNKNOWN
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import (
@@ -497,7 +498,7 @@ class AlertEntity(RestoreEntity):
 class CounterEntity(SensorEntity):
     """Counts active alerts per level."""
 
-    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(
         self,
