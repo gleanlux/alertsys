@@ -507,11 +507,10 @@ class CounterEntity(SensorEntity):
         self._level = level
         self._manager = manager
         self._object_id = COUNTER_ENTITY_IDS[level]
-        self.entity_id = f"{DOMAIN}.{self._object_id}"
 
     @property
     def unique_id(self) -> str:
-        return f"{DOMAIN}_{self._object_id}"
+        return f"{DOMAIN}_counter_{self._object_id}"
 
     @property
     def name(self) -> str:

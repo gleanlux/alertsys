@@ -53,7 +53,9 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     )
 
     component = EntityComponent[AlertEntity](_LOGGER, DOMAIN, hass)
+    counter_component = EntityComponent[CounterEntity](_LOGGER, "sensor", hass)
     hass.data[DOMAIN]["component"] = component
+    hass.data[DOMAIN]["counter_component"] = counter_component
     _register_services(hass, component)
 
     return True
@@ -69,15 +71,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     manager = AlertSysManager(hass, store)
     hass.data[DOMAIN]["manager"] = manager
 
-    # Use the domain-level entity component created in async_setup
+    # Use the domain-level components created in async_setup
     component: EntityComponent[AlertEntity] = hass.data[DOMAIN]["component"]
+    counter_component: EntityComponent[CounterEntity] = hass.data[DOMAIN]["counter_component"]
 
     # Create counter entities first (alerts may trigger counter updates immediately)
     counter_entities = []
     for level in (LEVEL_INFO, LEVEL_WARNING, LEVEL_ERROR):
         counter = CounterEntity(hass, level, manager)
         counter_entities.append(counter)
-    await component.async_add_entities(counter_entities)
+    await counter_component.async_add_entities(counter_entities)
 
     # Provide the add_entities callback to the manager for dynamic CRUD
     def add_entities_cb(entities):
@@ -137,9 +140,15 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         for entity in list(component.entities):
             await component.async_remove_entity(entity.entity_id)
 
+    counter_component: EntityComponent | None = hass.data.get(DOMAIN, {}).get("counter_component")
+    if counter_component:
+        for entity in list(counter_component.entities):
+            await counter_component.async_remove_entity(entity.entity_id)
+
     # Keep domain storage; drop entry-bound runtime.
     hass.data.get(DOMAIN, {}).pop("manager", None)
     hass.data.get(DOMAIN, {}).pop("panel_entry_url", None)
+    hass.data.get(DOMAIN, {}).pop("counter_component", None)
     return True
 
 

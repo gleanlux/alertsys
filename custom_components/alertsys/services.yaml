@@ -10,7 +10,8 @@ quit:
       required: false
       selector:
         entity:
-          integration: alertsys
+          filter:
+            domain: alertsys
 
 ack:
   name: Acknowledge alert
@@ -24,7 +25,8 @@ ack:
       required: true
       selector:
         entity:
-          integration: alertsys
+          filter:
+            domain: alertsys
 
 unack:
   name: Remove acknowledgement
@@ -37,7 +39,8 @@ unack:
       required: true
       selector:
         entity:
-          integration: alertsys
+          filter:
+            domain: alertsys
 
 ack_toggle:
   name: Toggle acknowledgement
@@ -51,4 +54,5 @@ ack_toggle:
       required: true
       selector:
         entity:
-          integration: alertsys
+          filter:
+            domain: alertsys
