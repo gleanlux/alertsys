@@ -1,5 +1,5 @@
 import { testNotification } from "../api/ws.js";
-import { looksLikeTemplate, validateTemplate } from "../api/templates.js";
+import { bindTemplateStatus } from "../api/templates.js";
 import { renderCategoryOptions } from "./category-select.js";
 
 // Renders the form body (inside .panel) and wires all form events.
@@ -62,9 +62,7 @@ export function renderAlertForm(panel) {
         <textarea id="f-condition" rows="3" placeholder="${esc(
     t("ph_condition")
   )}">${esc(a.condition || "")}</textarea>
-        <div class="condition-preview" id="condition-preview">${
-          panel._conditionPreview ? esc(t("status_preview")) + esc(panel._conditionPreview) : ""
-        }</div>
+        <div class="condition-preview" id="condition-preview"></div>
       </div>
 
       <div class="form-field">
@@ -132,7 +130,6 @@ export function renderAlertForm(panel) {
           <input type="text" id="f-notif-title" value="${esc(nc.title || "")}" placeholder="${esc(
     panel._notifDefaults.title
   )}" />
-          <div class="hint">${esc(t("ph_title_template"))}</div>
           <div class="tpl-status" id="tpl-status-title"></div>
         </div>
 
@@ -454,10 +451,41 @@ export function bindAlertForm(panel) {
     panel._idValid = true;
   }
 
-  // Condition live preview
+  // Condition live preview (unified template validator/renderer)
   const condInput = root.querySelector("#f-condition");
-  condInput?.addEventListener("input", () => panel._debounceConditionPreview(condInput.value));
-  if (a.condition) panel._debounceConditionPreview(a.condition);
+  const condStatus = root.querySelector("#condition-preview");
+  if (condInput && condStatus) {
+    const cleanup = bindTemplateStatus({
+      hass: panel._hass,
+      inputEl: condInput,
+      statusEl: condStatus,
+      t,
+      debounceMs: 500,
+      render: true,
+      requireBoolean: true,
+      getVariables: () => (typeof panel._getTemplatePreviewVariables === "function" ? panel._getTemplatePreviewVariables() : null),
+      onPlainValue: (val) => {
+        const entityId = (val || "").trim();
+        if (!entityId) return { text: "", cls: "", valid: null };
+        const stateObj = panel._hass?.states?.[entityId];
+        if (!stateObj) {
+          return { text: t("preview_entity_not_found", { condition: entityId }), cls: "error", valid: false };
+        }
+        return { text: t("preview_entity_state", { val: stateObj.state }), cls: "ok", valid: true };
+      },
+      onValidityChange: (v) => {
+        panel._conditionValid = v;
+        panel._updateSaveBtn();
+      },
+      baseClass: "condition-preview",
+      okClass: "ok",
+      errorClass: "error",
+      maxLen: 200,
+    });
+    if (typeof panel._registerCleanup === "function") {
+      panel._registerCleanup(cleanup);
+    }
+  }
 
   // Template syntax validation
   const tplFields = [
@@ -471,34 +499,24 @@ export function bindAlertForm(panel) {
     const inputEl = root.querySelector(tf.input);
     const statusEl = root.querySelector(tf.status);
     if (inputEl && statusEl) {
-      let tplTimer = null;
-      const validate = () => {
-        const val = inputEl.value || "";
-        if (!looksLikeTemplate(val)) {
-          statusEl.textContent = "";
-          statusEl.className = "tpl-status";
-          return;
-        }
-        clearTimeout(tplTimer);
-        tplTimer = setTimeout(async () => {
-          try {
-            const res = await validateTemplate(panel._hass, val);
-            if (res.valid) {
-              statusEl.textContent = t("preview_template_ok");
-              statusEl.className = "tpl-status valid";
-            } else {
-              statusEl.textContent = t("preview_syntax_error", { error: res.error });
-              statusEl.className = "tpl-status invalid";
-            }
-          } catch (_) {
-            statusEl.textContent = "";
-            statusEl.className = "tpl-status";
-          }
-        }, 600);
-      };
-
-      inputEl.addEventListener("input", validate);
-      if (inputEl.value) validate();
+      const cleanup = bindTemplateStatus({
+        hass: panel._hass,
+        inputEl,
+        statusEl,
+        t,
+        debounceMs: 600,
+        // Render previews for these fields too (not just syntax)
+        render: true,
+        requireBoolean: false,
+        getVariables: () => (typeof panel._getTemplatePreviewVariables === "function" ? panel._getTemplatePreviewVariables() : null),
+        baseClass: "tpl-status",
+        okClass: "ok",
+        errorClass: "error",
+        maxLen: 160,
+      });
+      if (typeof panel._registerCleanup === "function") {
+        panel._registerCleanup(cleanup);
+      }
     }
   }
 }

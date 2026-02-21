@@ -30,11 +30,6 @@ class AlertSysPanel extends HTMLElement {
     this._alerts = [];
     this._categories = [];
     this._editingAlert = null; // null = list view, {} = new, {id:...} = editing
-    this._conditionPreview = "";
-    this._conditionPreviewTimer = null;
-    this._templateUnsub = null;
-    this._conditionEvalSeq = 0; // monotonic sequence to ignore stale async results
-    this._conditionWatchdogTimer = null; // timeout if render_template doesn't respond
     this._conditionValid = null; // null = unknown, true/false
     this._notifyServices = []; // cached from WS
     this._autoQuitDefaults = { info: true, warning: true, error: false }; // overwritten from backend
@@ -47,6 +42,9 @@ class AlertSysPanel extends HTMLElement {
     this._connReadyHandler = null;
     this._connDiscHandler = null;
     this._onShadowClick = this._onShadowClick.bind(this);
+
+    // Cleanup callbacks registered by form bindings (timers, listeners, etc.)
+    this._cleanupFns = [];
   }
 
   async _loadTranslations() {
@@ -133,14 +131,13 @@ class AlertSysPanel extends HTMLElement {
 
   disconnectedCallback() {
     this._connected = false;
-    this._unsubTemplatePreview();
+    this._runCleanup();
     this._detachConnectionListeners();
   }
 
   // --- View routing helpers (used by views/list.js) ---
   _openNew() {
     this._editingAlert = { name: "", level: "info", condition: "", auto_quit: null, category_id: "default" };
-    this._conditionPreview = "";
     this._render();
   }
 
@@ -148,7 +145,6 @@ class AlertSysPanel extends HTMLElement {
     const alertObj = this._alerts.find(a => a.id === id);
     if (!alertObj) return;
     this._editingAlert = { ...alertObj, _isEdit: true };
-    this._conditionPreview = "";
     this._render();
   }
 
@@ -324,6 +320,9 @@ class AlertSysPanel extends HTMLElement {
   }
 
   _render() {
+    // Clear any pending timers/listeners from a previous view render
+    this._runCleanup();
+
     // List view
     if (this._editingAlert === null) {
       this.shadowRoot.innerHTML = `
@@ -343,167 +342,37 @@ class AlertSysPanel extends HTMLElement {
 
   // Form rendering moved to views/editor.js + components/alert-form.js
 
-  _debounceConditionPreview(value) {
-    if (this._conditionPreviewTimer) {
-      clearTimeout(this._conditionPreviewTimer);
+  _registerCleanup(fn) {
+    if (typeof fn === "function") {
+      this._cleanupFns.push(fn);
     }
-    // Unsubscribe from previous template subscription
-    this._unsubTemplatePreview();
-
-    this._conditionPreviewTimer = setTimeout(() => {
-      this._evaluateCondition(value);
-    }, 500);
   }
 
-  _unsubTemplatePreview() {
-    if (this._conditionWatchdogTimer) {
-      clearTimeout(this._conditionWatchdogTimer);
-      this._conditionWatchdogTimer = null;
-    }
-    if (this._templateUnsub) {
+  _runCleanup() {
+    const fns = this._cleanupFns;
+    this._cleanupFns = [];
+    for (const fn of fns) {
       try {
-        const p = this._templateUnsub();
-        if (p && typeof p.catch === "function") p.catch(() => {});
+        fn();
       } catch (_) {}
-      this._templateUnsub = null;
     }
   }
 
-  async _evaluateCondition(condition) {
-    const preview = this.shadowRoot?.querySelector("#condition-preview");
-    if (!preview) return;
-
-    const seq = ++this._conditionEvalSeq;
-
-    condition = condition.trim();
-    if (!condition) {
-      preview.textContent = "";
-      this._conditionValid = null;
-      this._updateSaveBtn();
-      return;
-    }
-
-    // If it looks like an entity_id (no template markers)
-    if (!condition.includes("{{") && !condition.includes("{%")) {
-      const state = this._hass?.states?.[condition];
-      if (state) {
-        const val = state.state;
-        const isTruthy = ["on", "true", "1"].includes(val.toLowerCase());
-        preview.textContent = this._t("preview_entity_state", { val, result: String(isTruthy) });
-        preview.className = "condition-preview " + (isTruthy ? "truthy" : "falsy");
-        this._conditionValid = true;
-      } else {
-        preview.textContent = this._t("preview_entity_not_found", { condition });
-        preview.className = "condition-preview error";
-        this._conditionValid = false;
-      }
-      this._updateSaveBtn();
-      return;
-    }
-
-    // Jinja2 template – 2-step pipeline: (1) syntax validate, (2) evaluate
-    // Step 1: explicit syntax validation so we can always show syntax errors.
-    try {
-      // Mark as invalid while we validate/evaluate. Save is still clickable, but will show error.
-      this._conditionValid = false;
-      this._updateSaveBtn();
-
-      // Backend validator should return { valid: boolean, error?: string }
-      const callWS = this._hass.callWS
-        ? this._hass.callWS.bind(this._hass)
-        : this._hass.connection.sendMessagePromise.bind(this._hass.connection);
-      const v = await callWS({ type: "alertsys/validate_template", template: condition });
-      if (seq !== this._conditionEvalSeq) return; // stale result
-
-      if (v && v.valid === false) {
-        const err = v.error || v.message || "Template syntax error";
-        preview.textContent = this._t("preview_template_error", { error: err });
-        preview.className = "condition-preview error";
-        this._conditionValid = false;
-        this._updateSaveBtn();
-        return;
-      }
-    } catch (e) {
-      if (seq !== this._conditionEvalSeq) return; // stale result
-      preview.textContent = this._t("preview_template_error", { error: e?.message || String(e) });
-      preview.className = "condition-preview error";
-      this._conditionValid = false;
-      this._updateSaveBtn();
-      return;
-    }
-
-    // Step 2: evaluation via HA's render_template subscription
-    let gotFirst = false;
-    try {
-      // Watchdog: HA sometimes doesn't emit an event on certain errors. Ensure we show *something*.
-      if (this._conditionWatchdogTimer) {
-        clearTimeout(this._conditionWatchdogTimer);
-        this._conditionWatchdogTimer = null;
-      }
-      this._conditionWatchdogTimer = setTimeout(() => {
-        if (seq !== this._conditionEvalSeq) return; // stale
-        if (gotFirst) return;
-        const p = this.shadowRoot?.querySelector("#condition-preview");
-        if (!p) return;
-        p.textContent = this._t("preview_template_error", { error: "No response from template renderer." });
-        p.className = "condition-preview error";
-        this._conditionValid = false;
-        this._updateSaveBtn();
-      }, 1500);
-
-      this._templateUnsub = await this._hass.connection.subscribeMessage(
-        (msg) => {
-          if (seq !== this._conditionEvalSeq) return; // stale
-          if (!this._connected) return;
-
-          gotFirst = true;
-          if (this._conditionWatchdogTimer) {
-            clearTimeout(this._conditionWatchdogTimer);
-            this._conditionWatchdogTimer = null;
-          }
-
-          const p = this.shadowRoot?.querySelector("#condition-preview");
-          if (!p) return;
-
-          const payload = msg?.event ?? msg;
-          const result = payload?.result;
-          const error = payload?.error ?? msg?.error;
-
-          if (error) {
-            const err = typeof error === "string" ? error : (error.message || JSON.stringify(error));
-            p.textContent = this._t("preview_template_error", { error: err });
-            p.className = "condition-preview error";
-            this._conditionValid = false;
-          } else if (result !== undefined) {
-            const resStr = String(result).trim().toLowerCase();
-            const boolLike = ["true", "false", "on", "off", "1", "0", "yes", "no"].includes(resStr);
-            const isTruthy = ["true", "on", "1", "yes"].includes(resStr);
-            if (boolLike) {
-              p.textContent = this._t("preview_template_result", { result, bool: String(isTruthy) });
-              p.className = "condition-preview " + (isTruthy ? "truthy" : "falsy");
-              this._conditionValid = true;
-            } else {
-              p.textContent = this._t("preview_template_not_bool", { result });
-              p.className = "condition-preview error";
-              this._conditionValid = false;
-            }
-          }
-
-          this._updateSaveBtn();
-        },
-        { type: "render_template", template: condition, strict: true }
-      );
-    } catch (e) {
-      if (seq !== this._conditionEvalSeq) return; // stale
-      if (this._conditionWatchdogTimer) {
-        clearTimeout(this._conditionWatchdogTimer);
-        this._conditionWatchdogTimer = null;
-      }
-      preview.textContent = this._t("preview_template_error", { error: e?.message || String(e) });
-      preview.className = "condition-preview error";
-      this._conditionValid = false;
-      this._updateSaveBtn();
-    }
+  _getTemplatePreviewVariables() {
+    const root = this.shadowRoot;
+    const name = root?.querySelector("#f-name")?.value?.trim?.() || "";
+    const level = root?.querySelector("#f-level")?.value || "info";
+    const condition = root?.querySelector("#f-condition")?.value?.trim?.() || "";
+    const idSuffix = root?.querySelector("#f-id")?.value?.trim?.() || "preview";
+    const entity_id = `alertsys.${idSuffix || "preview"}`;
+    return {
+      name,
+      level,
+      condition,
+      entity_id,
+      count: 1,
+      triggered_at: new Date().toISOString(),
+    };
   }
 
   async _saveAlert() {
@@ -639,9 +508,8 @@ class AlertSysPanel extends HTMLElement {
   }
 
   _closeForm() {
-    this._unsubTemplatePreview();
+    this._runCleanup();
     this._editingAlert = null;
-    this._conditionPreview = "";
     this._conditionValid = null;
     this._idValid = true;
     this._render();

@@ -221,14 +221,11 @@ export const STYLES = `
       .hint { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
       .condition-preview {
         margin-top: 6px;
-        padding: 6px 10px;
-        border-radius: 4px;
         font-size: 13px;
         min-height: 18px;
       }
-      .condition-preview.truthy { background: rgba(76,175,80,0.12); color: var(--success-color); }
-      .condition-preview.falsy { background: rgba(255,152,0,0.12); color: #f57c00; }
-      .condition-preview.error { background: rgba(219,68,55,0.08); color: var(--error-color); }
+      .condition-preview.ok { color: var(--success-color); }
+      .condition-preview.error { color: var(--error-color); }
       /* Notification section */
       .notif-toggle { font-weight: 500; gap: 8px; margin-top: 8px; padding: 10px 0; border-top: 1px solid var(--divider); }
       .notif-section {
@@ -265,8 +262,8 @@ export const STYLES = `
       .chip-x:hover { opacity: 1; }
 
       .tpl-status { font-size: 12px; margin-top: 3px; }
-      .tpl-status.valid { color: var(--success-color); }
-      .tpl-status.invalid { color: var(--error-color); }
+      .tpl-status.ok, .tpl-status.valid { color: var(--success-color); }
+      .tpl-status.error, .tpl-status.invalid { color: var(--error-color); }
       .test-btn-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; margin-bottom: 12px; }
       .form-actions { display: flex; gap: 12px; margin-top: 24px; }
       .error-msg { color: var(--error-color); background: rgba(219,68,55,0.08); padding: 10px 14px; border-radius: 4px; margin-top: 12px; }
