@@ -1,5 +1,34 @@
 // Template-related WS helpers (syntax validation).
 
+function _shortenTemplateError(err) {
+  let s = (err ?? "").toString().trim();
+  if (!s) return "Unknown template error";
+
+  // Common duplicated prefixes from HA TemplateError wrapping
+  s = s.replace(/^Template error:\s*/i, "");
+  s = s.replace(/^ValueError:\s*/i, "");
+  s = s.replace(/^Template error:\s*/i, "");
+
+  // Drop the huge "when rendering template '...'" part (often contains the full template again)
+  s = s.replace(/\s+when rendering template[\s\S]*$/i, "");
+
+  // Friendly hints for very common pitfalls
+  const mFloat = s.match(/float got invalid input '([^']+)'/i);
+  if (mFloat) {
+    return `float: invalid input '${mFloat[1]}'`;
+  }
+  const mInt = s.match(/int got invalid input '([^']+)'/i);
+  if (mInt) {
+    return `int: invalid input '${mInt[1]}'`;
+  }
+
+  // Keep it short
+  const MAX = 160;
+  if (s.length > MAX) s = s.slice(0, MAX - 1) + "…";
+  return s;
+}
+
+
 export function looksLikeTemplate(str) {
   if (!str) return false;
   return str.includes("{{") || str.includes("{%");
@@ -30,86 +59,31 @@ export async function renderTemplateOnce(
   template,
   { variables = null, strict = true, timeoutMs = 1500 } = {}
 ) {
-  if (!hass?.connection?.subscribeMessage) {
+  if (!hass || typeof hass.callWS !== "function") {
     throw new Error("No Home Assistant websocket connection");
   }
+  // Use our own backend renderer to avoid HA log spam while typing.
+  // The built-in `render_template` subscription logs template errors to the
+  // system log on each partial/invalid render.
+  const msg = {
+    type: "alertsys/template/render_once",
+    template,
+    strict: !!strict,
+  };
+  if (variables && typeof variables === "object") {
+    msg.variables = variables;
+  }
 
-  let done = false;
-  let unsub = null;
-  let wantUnsubAfterReady = false;
+  // Timeout guard (callWS itself has internal timeouts, but keep this local)
+  const timeout = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error("No response from template renderer.")), timeoutMs)
+  );
 
-  return await new Promise(async (resolve, reject) => {
-    const timer = setTimeout(() => {
-      if (done) return;
-      done = true;
-      try {
-        if (unsub) unsub();
-      } catch (_) {}
-      reject(new Error("No response from template renderer."));
-    }, timeoutMs);
-
-    const onMsg = (msg) => {
-      if (done) return;
-      done = true;
-      clearTimeout(timer);
-
-      // We might receive the callback before `unsub` is assigned.
-      if (unsub) {
-        try {
-          unsub();
-        } catch (_) {}
-      } else {
-        wantUnsubAfterReady = true;
-      }
-
-      const payload = msg?.event ?? msg;
-      const error = payload?.error ?? msg?.error;
-      if (error) {
-        reject(new Error(_normalizeWsError(error)));
-        return;
-      }
-      resolve({ result: payload?.result });
-    };
-
-    const subscribe = async (withVars) => {
-      const msg = { type: "render_template", template, strict };
-      if (withVars && variables && typeof variables === "object") {
-        msg.variables = variables;
-      }
-      return await hass.connection.subscribeMessage(onMsg, msg);
-    };
-
-    try {
-      unsub = await subscribe(true);
-      if (wantUnsubAfterReady) {
-        try {
-          unsub();
-        } catch (_) {}
-      }
-    } catch (e) {
-      // Compatibility fallback: some HA versions may reject unknown keys.
-      if (variables) {
-        try {
-          unsub = await subscribe(false);
-          if (wantUnsubAfterReady) {
-            try {
-              unsub();
-            } catch (_) {}
-          }
-          return;
-        } catch (_) {
-          // fall through to error handling below
-        }
-      }
-      clearTimeout(timer);
-      if (done) return;
-      done = true;
-      try {
-        if (unsub) unsub();
-      } catch (_) {}
-      reject(e);
-    }
-  });
+  const res = await Promise.race([hass.callWS(msg), timeout]);
+  if (res?.error) {
+    throw new Error(String(res.error));
+  }
+  return { result: res?.result };
 }
 
 /**
@@ -141,9 +115,10 @@ export function bindTemplateStatus({
   let timer = null;
   let seq = 0;
 
-  const setStatus = (text, cls) => {
+  const setStatus = (text, cls, title = "") => {
     statusEl.textContent = text || "";
     statusEl.className = [baseClass, cls].filter(Boolean).join(" ");
+    statusEl.title = title || "";
   };
 
   const run = async () => {
@@ -152,7 +127,7 @@ export function bindTemplateStatus({
     const trimmed = val.trim();
 
     if (!trimmed) {
-      setStatus("", "");
+      setStatus("", "", "");
       if (typeof onValidityChange === "function") onValidityChange(null);
       return;
     }
@@ -178,19 +153,23 @@ export function bindTemplateStatus({
       const v = await validateTemplate(hass, val);
       if (cur !== seq) return;
       if (v && v.valid === false) {
-        setStatus(t("preview_syntax_error", { error: v.error || v.message || "" }), errorClass);
+        const full = (v.error || v.message || "").toString();
+        const short = _shortenTemplateError(full);
+        setStatus(t("preview_syntax_error", { error: short }), errorClass, full);
         if (typeof onValidityChange === "function") onValidityChange(false);
         return;
       }
     } catch (e) {
       if (cur !== seq) return;
-      setStatus(t("preview_template_error", { error: e?.message || String(e) }), errorClass);
+      const full = (e?.message || String(e) || "").toString();
+      const short = _shortenTemplateError(full);
+      setStatus(t("preview_template_error", { error: short }), errorClass, full);
       if (typeof onValidityChange === "function") onValidityChange(false);
       return;
     }
 
     if (!render) {
-      setStatus(t("preview_template_ok"), okClass);
+      setStatus(t("preview_template_ok"), okClass, "");
       if (typeof onValidityChange === "function") onValidityChange(true);
       return;
     }
@@ -213,11 +192,13 @@ export function bindTemplateStatus({
       }
 
       const clipped = resStr.length > maxLen ? resStr.slice(0, maxLen - 1) + "…" : resStr;
-      setStatus(t("preview_template_result", { result: clipped }), okClass);
+      setStatus(t("preview_template_result", { result: clipped }), okClass, "");
       if (typeof onValidityChange === "function") onValidityChange(true);
     } catch (e) {
       if (cur !== seq) return;
-      setStatus(t("preview_template_error", { error: e?.message || String(e) }), errorClass);
+      const full = (e?.message || String(e) || "").toString();
+      const short = _shortenTemplateError(full);
+      setStatus(t("preview_template_error", { error: short }), errorClass, full);
       if (typeof onValidityChange === "function") onValidityChange(false);
     }
   };

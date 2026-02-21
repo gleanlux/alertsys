@@ -73,6 +73,9 @@ class AlertEntity(RestoreEntity):
         self._tracked_entity_id: str | None = None
         self._track_template_info = None
         self._unsub_entity_tracker = None
+         # Track last template error to avoid log spam
+        self._last_template_error: str | None = None
+
 
         if self._is_template:
             self._template = Template(condition_config, hass)
@@ -158,18 +161,29 @@ class AlertEntity(RestoreEntity):
     def _setup_template_tracking(self) -> None:
         """Track a template condition."""
         track = TrackTemplate(self._template, None, None)
+        # Prevent Home Assistant from writing template preview/config errors
+        # to the system log on every render (common while editing).
+        def _noop_log_fn(_level: int, _message: str) -> None:
+            return
 
         @callback
         def _template_result_changed(event, updates):
             track_result = updates.pop()
             result = track_result.result
             if isinstance(result, Exception):
-                _LOGGER.error(
-                    "Error evaluating template for %s: %s",
-                    self.entity_id,
-                    result,
-                )
+                err = str(result)
+                # Log at debug, and only when the error changes.
+                if err != self._last_template_error:
+                    _LOGGER.debug(
+                        "Template error for %s: %s",
+                        self.entity_id,
+                        err,
+                    )
+                    self._last_template_error = err
                 return
+            # Clear error state once template renders again
+            if self._last_template_error is not None:
+                self._last_template_error = None
             try:
                 new_condition = result_as_boolean(result)
             except ValueError:
@@ -185,6 +199,7 @@ class AlertEntity(RestoreEntity):
             self.hass,
             [track],
             _template_result_changed,
+            log_fn=_noop_log_fn,
         )
         self._track_template_info.async_refresh()
 

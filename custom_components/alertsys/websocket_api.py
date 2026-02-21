@@ -57,6 +57,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_notify_services)
     websocket_api.async_register_command(hass, ws_test_notification)
     websocket_api.async_register_command(hass, ws_validate_template)
+    websocket_api.async_register_command(hass, ws_render_template_once)
     websocket_api.async_register_command(hass, ws_get_translations)
     websocket_api.async_register_command(hass, ws_entity_id_suggest)
     websocket_api.async_register_command(hass, ws_entity_id_check)
@@ -345,7 +346,46 @@ async def ws_validate_template(hass, connection, msg):
     except Exception:
         _LOGGER.exception("Failed to validate template")
         connection.send_error(msg["id"], "unknown_error", "Failed to validate template")
+@websocket_api.require_admin
+@websocket_api.websocket_command({
+    vol.Required("type"): "alertsys/template/render_once",
+    vol.Required("template"): str,
+    vol.Optional("variables"): vol.Any(None, dict),
+    vol.Optional("strict", default=True): bool,
+})
+@websocket_api.async_response
+async def ws_render_template_once(hass, connection, msg):
+    """Render a template once for UI preview without polluting HA logs.
 
+    We deliberately avoid using HA's built-in `render_template` WS subscription
+    because it uses template tracking helpers that log errors to the system log
+    while the user is typing (partial/invalid templates).
+    """
+    try:
+        template_str = (msg.get("template") or "").strip()
+        if not template_str:
+            connection.send_result(msg["id"], {"result": "", "error": ""})
+            return
+
+        variables = msg.get("variables")
+        strict = bool(msg.get("strict", True))
+
+        # Swallow template engine logs for preview rendering.
+        def _noop_log_fn(_level: int, _message: str) -> None:
+            return
+
+        tpl = Template(template_str, hass)
+        info = tpl.async_render_to_info(variables, strict=strict, log_fn=_noop_log_fn)
+        try:
+            result = info.result()
+        except Exception as exc:  # TemplateError inherits Exception
+            connection.send_result(msg["id"], {"result": None, "error": str(exc)})
+            return
+
+        connection.send_result(msg["id"], {"result": result, "error": ""})
+    except Exception:
+        _LOGGER.exception("Failed to render template once")
+        connection.send_error(msg["id"], "unknown_error", "Failed to render template")
 
 def _read_json_file(file_path: Path) -> dict:
     """Read and parse JSON file synchronously."""

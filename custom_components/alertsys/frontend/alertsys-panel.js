@@ -366,7 +366,9 @@ class AlertSysPanel extends HTMLElement {
     const level = root?.querySelector("#f-level")?.value || "info";
     const condition = root?.querySelector("#f-condition")?.value?.trim?.() || "";
     const entEl = root?.querySelector("#f-entity-id");
-    const entity_id = entEl?.value?.trim?.() || entEl?.placeholder?.trim?.() || "alertsys.preview";
+    // Entity ID input holds only object_id; domain prefix is fixed in UI.
+    const obj = entEl?.value?.trim?.() || entEl?.placeholder?.trim?.() || "";
+    const entity_id = obj ? `alertsys.${obj}` : "alertsys.preview";
     return {
       name,
       level,
@@ -383,7 +385,8 @@ class AlertSysPanel extends HTMLElement {
     errDiv.style.display = "none";
 
     const name = this.shadowRoot.querySelector("#f-name").value.trim();
-    const entity_id = this.shadowRoot.querySelector("#f-entity-id").value.trim();
+    const object_id = this.shadowRoot.querySelector("#f-entity-id").value.trim();
+    const entity_id = object_id ? `alertsys.${object_id}` : "";
     const description = this.shadowRoot.querySelector("#f-description").value.trim();
     const level = this.shadowRoot.querySelector("#f-level").value;
     const condition = this.shadowRoot.querySelector("#f-condition").value.trim();
@@ -481,7 +484,7 @@ class AlertSysPanel extends HTMLElement {
     // Users may want to save a draft while still editing notification targets/templates.
 
     // entity_id is optional on create; required on edit
-    if (isEdit && !entity_id) { this._showError(this._t("err_id_required")); return; }
+    if (isEdit && !object_id) { this._showError(this._t("err_id_required")); return; }
 
         try {
       if (isEdit) {
@@ -500,14 +503,29 @@ class AlertSysPanel extends HTMLElement {
     const btn = this.shadowRoot?.querySelector("#btn-save");
     if (!btn) return;
 
-    // Disable save when hard validation fails (entity_id / condition)
-    const hardInvalid = this._conditionValid === false || this._idValid === false;
+    // Notification template invalid? (only when notification is enabled)
+    let notifInvalid = false;
+    try {
+      const notifEnabled = !!this.shadowRoot?.querySelector("#f-notif-enabled")?.checked;
+      if (notifEnabled) {
+        const sendResolve = !!this.shadowRoot?.querySelector("#f-notif-resolve")?.checked;
+        const v = this._notifTplValidity || {};
+        notifInvalid = (v.title === false) || (v.message === false) || (sendResolve && ((v.resolve_title === false) || (v.resolve_message === false)));
+      }
+    } catch (_) {
+      notifInvalid = false;
+    }
+
+    // Disable save when hard validation fails (entity_id / condition / notification templates)
+    const hardInvalid = this._conditionValid === false || this._idValid === false || notifInvalid;
     btn.disabled = hardInvalid;
 
     if (this._conditionValid === false) {
       btn.title = this._t("tooltip_condition_bool");
     } else if (this._idValid === false) {
       btn.title = this._t("tooltip_fix_id");
+    } else if (notifInvalid) {
+      btn.title = this._t("tooltip_fix_notification");
     } else {
       btn.title = "";
     }

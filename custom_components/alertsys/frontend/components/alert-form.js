@@ -15,6 +15,9 @@ export function renderAlertForm(panel) {
   const title = isEdit ? t("form_title_edit", { name: a.name }) : t("form_title_new");
   const nc = a.notification || {};
 
+  const fullEntityId = (a.entity_id || '').trim();
+  const objectId = fullEntityId.startsWith('alertsys.') ? fullEntityId.slice('alertsys.'.length) : (fullEntityId.split('.')[1] || '');
+
   const aqOverride = a.auto_quit !== null && a.auto_quit !== undefined;
   const aqValue = aqOverride ? !!a.auto_quit : true;
 
@@ -41,8 +44,11 @@ export function renderAlertForm(panel) {
 
       <div class="form-field">
         <label>${esc(t("field_entity_id"))}</label>
-        <input type="text" id="f-entity-id" value="${esc(a.entity_id || "")}" placeholder="${esc(panel._entityIdPlaceholder || "")}" />
-        <div class="id-error" id="id-error"></div>
+        <div class="id-input-wrap">
+          <span class="id-prefix">alertsys.</span>
+          <input type="text" id="f-entity-id" value="${esc(objectId || "")}" placeholder="${esc(panel._entityIdPlaceholderObj || "")}" />
+          <span class="id-error" id="id-error"></span>
+        </div>
       </div>
 
       <div class="form-field">
@@ -277,6 +283,7 @@ export function bindAlertForm(panel) {
   notifEnabled?.addEventListener("change", () => {
     if (!notifConfig) return;
     notifConfig.style.display = notifEnabled.checked ? "block" : "none";
+    panel._updateSaveBtn?.();
   });
 
   // Notification numeric constraints:
@@ -357,6 +364,7 @@ export function bindAlertForm(panel) {
   resolveChk?.addEventListener("change", () => {
     if (!resolveWrap) return;
     resolveWrap.style.display = resolveChk.checked ? "block" : "none";
+    panel._updateSaveBtn?.();
   });
 
   // Helper: test notif context
@@ -365,7 +373,8 @@ export function bindAlertForm(panel) {
     const level = root.querySelector("#f-level")?.value || "info";
     const condition = root.querySelector("#f-condition")?.value || "";
     const entInput = root.querySelector("#f-entity-id");
-    const entityId = entInput?.value?.trim() || entInput?.placeholder?.trim() || "alertsys.test";
+    const objectId = entInput?.value?.trim() || entInput?.placeholder?.trim() || "test";
+    const entityId = objectId ? `alertsys.${objectId}` : "alertsys.test";
     return { context_name: name, context_level: level, context_condition: condition, context_entity_id: entityId };
   };
   const parseDataField = (selector) => {
@@ -454,9 +463,13 @@ export function bindAlertForm(panel) {
     const name = nameInput.value.trim();
     try {
       const res = await suggestEntityId(panel._hass, name || "Alert", a?._isEdit ? a.id : undefined);
-      panel._entityIdPlaceholder = res.entity_id || "";
+      
+      const full = (res.entity_id || '').trim();
+      const obj = full.startsWith('alertsys.') ? full.slice('alertsys.'.length) : (full.split('.')[1] || '');
+      panel._entityIdPlaceholderObj = obj;
+
       if (!entInput.value.trim()) {
-        entInput.placeholder = panel._entityIdPlaceholder;
+        entInput.placeholder = panel._entityIdPlaceholderObj || '';
       }
     } catch (_) {
       // ignore (backend not ready)
@@ -492,7 +505,7 @@ export function bindAlertForm(panel) {
     }
 
     // Quick local format check (official form only)
-    const okFormat = /^alertsys\.[a-z0-9_]+$/.test(v);
+    const okFormat = /^[a-z0-9_]+$/.test(v);
     if (!okFormat) {
       setIdError(t("err_id_invalid"));
       panel._idValid = false;
@@ -501,7 +514,7 @@ export function bindAlertForm(panel) {
     }
 
     try {
-      const res = await checkEntityId(panel._hass, v, isEdit ? a.id : undefined);
+      const res = await checkEntityId(panel._hass, `alertsys.${v}`, isEdit ? a.id : undefined);
       if (!res.valid) {
         setIdError(t("err_id_invalid"));
         panel._idValid = false;
