@@ -25,6 +25,7 @@ from .const import (
     ATTR_CONDITION,
     ATTR_LEVEL,
     ATTR_AUTO_QUIT,
+    ATTR_DESCRIPTION,
     COUNTER_ENTITY_IDS,
     DOMAIN,
     NOTIF_DEFAULT_MESSAGE,
@@ -43,22 +44,23 @@ class AlertEntity(RestoreEntity):
     def __init__(
         self,
         hass: HomeAssistant,
-        object_id: str,
+        uid: str,
         name: str,
         level: str,
         condition_config: str,
         auto_quit: bool,
         manager: AlertSysManager,
         notification_config: dict | None = None,
+        description: str = "",
     ) -> None:
         self.hass = hass
-        self.entity_id = f"{DOMAIN}.{object_id}"
-        self._object_id = object_id
+        self._uid = uid
         self._attr_name = name
         self._level = level
         self._condition_config = condition_config
         self._auto_quit = auto_quit
         self._manager = manager
+        self._description = description or ""
 
         # State
         self._active = False
@@ -85,7 +87,8 @@ class AlertEntity(RestoreEntity):
 
     @property
     def unique_id(self) -> str:
-        return f"{DOMAIN}_{self._object_id}"
+        # Stable unique_id is the UID stored in our store
+        return self._uid
 
     @property
     def should_poll(self) -> bool:
@@ -111,11 +114,8 @@ class AlertEntity(RestoreEntity):
             ATTR_ACK: self._ack,
             ATTR_LEVEL: self._level,
             ATTR_AUTO_QUIT: self._auto_quit,
+            ATTR_DESCRIPTION: self._description,
         }
-
-    @property
-    def object_id(self) -> str:
-        return self._object_id
 
     @property
     def level(self) -> str:
@@ -136,7 +136,7 @@ class AlertEntity(RestoreEntity):
     async def async_added_to_hass(self) -> None:
         """Start tracking condition when entity is added."""
         # Register with manager
-        self._manager.register_alert_entity(self._object_id, self)
+        self._manager.register_alert_entity(self._uid, self)
 
         # Restore only ack from previous state
         restored_ack = False
@@ -257,7 +257,6 @@ class AlertEntity(RestoreEntity):
             return False
         if self._condition_met:
             return False
-        # Timer and count already handled by condition True->False
         self._active = False
         self._ack = False
         self._triggered_at = None
@@ -310,7 +309,7 @@ class AlertEntity(RestoreEntity):
         # Send first notification immediately
         self.hass.async_create_task(self._async_send_notification())
 
-         # Start repeat timer only if repeat_count > 0
+        # Start repeat timer only if repeat_count > 0
         repeat_count = nc.get("repeat_count", 0)
         if repeat_count > 0:
             interval = nc.get("repeat_interval_sec", 60)
@@ -459,12 +458,17 @@ class AlertEntity(RestoreEntity):
             return ""
         try:
             tpl = Template(template_str, self.hass)
+            # Keep 'alert_id' as the object_id part for backward compatibility
+            alert_id = ""
+            if self.entity_id and self.entity_id.startswith(f"{DOMAIN}."):
+                alert_id = self.entity_id.replace(f"{DOMAIN}.", "", 1)
             variables = {
                 "name": self._attr_name,
                 "level": self._level,
                 "condition": self._condition_config,
                 "entity_id": self.entity_id,
-                "alert_id": self._object_id,
+                "alert_id": alert_id,
+                "alert_uid": self._uid,
                 "count": self._notif_count + 1,
                 "triggered_at": self._triggered_at,
             }
@@ -488,7 +492,7 @@ class AlertEntity(RestoreEntity):
     async def async_will_remove_from_hass(self) -> None:
         """Clean up trackers and unregister from manager."""
         self._stop_notification_timer()
-        self._manager.unregister_alert_entity(self._object_id)
+        self._manager.unregister_alert_entity(self._uid)
         if self._track_template_info:
             self._track_template_info.async_remove()
         if self._unsub_entity_tracker:

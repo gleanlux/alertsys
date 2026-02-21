@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from pathlib import Path
 
 import jinja2
@@ -57,6 +58,8 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_test_notification)
     websocket_api.async_register_command(hass, ws_validate_template)
     websocket_api.async_register_command(hass, ws_get_translations)
+    websocket_api.async_register_command(hass, ws_entity_id_suggest)
+    websocket_api.async_register_command(hass, ws_entity_id_check)
 
 
 @websocket_api.require_admin
@@ -86,6 +89,8 @@ async def ws_list_alerts(hass, connection, msg):
 @websocket_api.websocket_command({
     vol.Required("type"): "alertsys/alert/create",
     vol.Required("name"): str,
+    vol.Optional("entity_id"): str,
+    vol.Optional("description"): str,
     vol.Optional("level", default="info"): vol.In(VALID_LEVELS),
     vol.Required("condition"): str,
     vol.Optional("auto_quit"): vol.Any(None, bool),
@@ -100,6 +105,8 @@ async def ws_create_alert(hass, connection, msg):
         manager = hass.data[DOMAIN]["manager"]
         result = await manager.async_create_alert({
             "name": msg["name"],
+            "entity_id": msg.get("entity_id"),
+            "description": msg.get("description"),
             "level": msg.get("level", "info"),
             "condition": msg["condition"],
             "auto_quit": msg.get("auto_quit"),
@@ -118,14 +125,15 @@ async def ws_create_alert(hass, connection, msg):
 @websocket_api.require_admin
 @websocket_api.websocket_command({
     vol.Required("type"): "alertsys/alert/update",
-    vol.Required("alert_id"): str,
-    vol.Optional("new_alert_id"): str,
+    vol.Required("alert_uid"): str,
+    vol.Optional("entity_id"): str,
     vol.Optional("name"): str,
     vol.Optional("level"): vol.In(VALID_LEVELS),
     vol.Optional("condition"): str,
     vol.Optional("auto_quit"): vol.Any(None, bool),
     vol.Optional("category_id"): vol.Any(None, str),
     vol.Optional("category_name"): vol.Any(None, str),
+    vol.Optional("description"): str,
     vol.Optional("notification"): vol.Schema(NOTIFICATION_SCHEMA),
 })
 @websocket_api.async_response
@@ -134,35 +142,92 @@ async def ws_update_alert(hass, connection, msg):
     try:
         manager = hass.data[DOMAIN]["manager"]
         data = {}
-        for key in ("name", "level", "condition", "auto_quit", "category_id", "category_name", "new_alert_id", "notification"):
+        for key in ("entity_id", "name", "level", "condition", "auto_quit", "category_id", "category_name", "description", "notification"):
             if key in msg:
                 data[key] = msg[key]
-        result = await manager.async_update_alert(msg["alert_id"], data)
+        result = await manager.async_update_alert(msg["alert_uid"], data)
         connection.send_result(msg["id"], result)
     except ValueError as exc:
         connection.send_error(msg["id"], "invalid_input", str(exc))
     except Exception:
-        _LOGGER.exception("Failed to update alert '%s'", msg.get("alert_id"))
+        _LOGGER.exception("Failed to update alert '%s'", msg.get("alert_uid"))
         connection.send_error(msg["id"], "unknown_error", "Failed to update alert")
 
 
 @websocket_api.require_admin
 @websocket_api.websocket_command({
     vol.Required("type"): "alertsys/alert/delete",
-    vol.Required("alert_id"): str,
+    vol.Required("alert_uid"): str,
 })
 @websocket_api.async_response
 async def ws_delete_alert(hass, connection, msg):
     """Delete an alert."""
     try:
         manager = hass.data[DOMAIN]["manager"]
-        await manager.async_delete_alert(msg["alert_id"])
+        await manager.async_delete_alert(msg["alert_uid"])
         connection.send_result(msg["id"], {"success": True})
     except ValueError as exc:
         connection.send_error(msg["id"], "invalid_input", str(exc))
     except Exception:
-        _LOGGER.exception("Failed to delete alert '%s'", msg.get("alert_id"))
+        _LOGGER.exception("Failed to delete alert '%s'", msg.get("alert_uid"))
         connection.send_error(msg["id"], "unknown_error", "Failed to delete alert")
+
+
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command({
+    vol.Required("type"): "alertsys/entity_id/suggest",
+    vol.Required("name"): str,
+    vol.Optional("alert_uid"): str,
+})
+@websocket_api.async_response
+async def ws_entity_id_suggest(hass, connection, msg):
+    """Suggest a free entity_id based on the provided name."""
+    try:
+        manager = hass.data[DOMAIN]["manager"]
+        entity_id = await manager.async_suggest_entity_id(
+            msg["name"], exclude_uid=msg.get("alert_uid")
+        )
+        connection.send_result(msg["id"], {"entity_id": entity_id})
+    except Exception:
+        _LOGGER.exception("Failed to suggest entity_id")
+        connection.send_error(msg["id"], "unknown_error", "Failed to suggest entity_id")
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command({
+    vol.Required("type"): "alertsys/entity_id/check",
+    vol.Required("entity_id"): str,
+    vol.Optional("alert_uid"): str,
+})
+@websocket_api.async_response
+async def ws_entity_id_check(hass, connection, msg):
+    """Validate entity_id format and availability."""
+    try:
+        manager = hass.data[DOMAIN]["manager"]
+        entity_id = (msg.get("entity_id") or "").strip().lower()
+        # Official form only: alertsys.<object_id>
+        valid = bool(re.fullmatch(rf"{DOMAIN}\.[a-z0-9_]+", entity_id))
+        if not valid:
+            connection.send_result(msg["id"], {
+                "valid": False,
+                "available": False,
+                "error": "Invalid entity_id format",
+            })
+            return
+
+        available = await manager.async_entity_id_available(
+            entity_id, exclude_uid=msg.get("alert_uid")
+        )
+        connection.send_result(msg["id"], {
+            "valid": True,
+            "available": bool(available),
+            "error": "" if available else "Entity ID already exists",
+        })
+    except Exception:
+        _LOGGER.exception("Failed to check entity_id")
+        connection.send_error(msg["id"], "unknown_error", "Failed to check entity_id")
 
 
 @websocket_api.require_admin

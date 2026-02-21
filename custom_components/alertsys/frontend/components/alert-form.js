@@ -1,4 +1,4 @@
-import { testNotification } from "../api/ws.js";
+import { testNotification, suggestEntityId, checkEntityId } from "../api/ws.js";
 import { bindTemplateStatus } from "../api/templates.js";
 import { renderCategoryOptions } from "./category-select.js";
 
@@ -31,17 +31,23 @@ export function renderAlertForm(panel) {
     </div>
 
     <div class="form-container">
-      ${
-        isEdit
-          ? `<div class="form-field"><label>${esc(t("field_entity_id"))}</label><div class="id-input-wrap"><span class="id-prefix">alertsys.</span><input type="text" id="f-id" value="${esc(a.id)}" /><span class="id-error" id="id-error"></span></div></div>`
-          : ""
-      }
 
       <div class="form-field">
         <label>${esc(t("field_name"))}</label>
         <input type="text" id="f-name" value="${esc(a.name || "")}" placeholder="${esc(
     t("ph_name")
   )}" />
+      </div>
+
+      <div class="form-field">
+        <label>${esc(t("field_entity_id"))}</label>
+        <input type="text" id="f-entity-id" value="${esc(a.entity_id || "")}" placeholder="${esc(panel._entityIdPlaceholder || "")}" />
+        <div class="id-error" id="id-error"></div>
+      </div>
+
+      <div class="form-field">
+        <label>${esc(t("field_description"))}</label>
+        <textarea id="f-description" rows="2" maxlength="255" placeholder="${esc(t("ph_description"))}">${esc(a.description || "")}</textarea>
       </div>
 
       <div class="form-field">
@@ -358,8 +364,8 @@ export function bindAlertForm(panel) {
     const name = root.querySelector("#f-name")?.value || "Test Alert";
     const level = root.querySelector("#f-level")?.value || "info";
     const condition = root.querySelector("#f-condition")?.value || "";
-    const idInput = root.querySelector("#f-id");
-    const entityId = idInput ? `alertsys.${idInput.value.trim()}` : "alertsys.test";
+    const entInput = root.querySelector("#f-entity-id");
+    const entityId = entInput?.value?.trim() || entInput?.placeholder?.trim() || "alertsys.test";
     return { context_name: name, context_level: level, context_condition: condition, context_entity_id: entityId };
   };
   const parseDataField = (selector) => {
@@ -422,35 +428,106 @@ export function bindAlertForm(panel) {
     setTimeout(() => { statusEl.textContent = ""; }, 5000);
   });
 
-  // ID duplicate check (edit mode only)
-  const idInput = root.querySelector("#f-id");
+
+  // Entity ID live validation (create + edit)
+  const entInput = root.querySelector("#f-entity-id");
   const idError = root.querySelector("#id-error");
   const a = panel._editingAlert;
-  if (idInput && idError) {
-    const originalId = a.id;
-    const checkIdDuplicate = () => {
-      const suffix = idInput.value.trim();
-      if (!suffix) {
-        idError.textContent = t("err_id_empty");
-        panel._idValid = false;
-      } else {
-        const exists = suffix !== originalId && (panel._alerts || []).some((al) => al.id === suffix);
-        if (exists) {
-          idError.textContent = t("err_id_exists");
-          panel._idValid = false;
-        } else {
-          idError.textContent = "";
-          panel._idValid = true;
-        }
-      }
-      panel._updateSaveBtn();
-    };
-    idInput.addEventListener("input", checkIdDuplicate);
-    panel._idValid = true;
-  } else {
-    panel._idValid = true;
+
+  const setIdError = (msg) => {
+    if (idError) idError.textContent = msg || "";
+  };
+
+  // Description hard limit (safety even with maxlength)
+  const descEl = root.querySelector("#f-description");
+  if (descEl) {
+    descEl.addEventListener("input", () => {
+      if (descEl.value.length > 255) descEl.value = descEl.value.slice(0, 255);
+    });
   }
 
+  // Suggest entity_id placeholder from name (debounced)
+  const nameInput = root.querySelector("#f-name");
+  let suggestTimer = null;
+  const runSuggest = async () => {
+    if (!nameInput || !entInput) return;
+    const name = nameInput.value.trim();
+    try {
+      const res = await suggestEntityId(panel._hass, name || "Alert", a?._isEdit ? a.id : undefined);
+      panel._entityIdPlaceholder = res.entity_id || "";
+      if (!entInput.value.trim()) {
+        entInput.placeholder = panel._entityIdPlaceholder;
+      }
+    } catch (_) {
+      // ignore (backend not ready)
+    }
+  };
+
+  if (nameInput && entInput) {
+    // initial placeholder
+    setTimeout(runSuggest, 0);
+    nameInput.addEventListener("input", () => {
+      if (suggestTimer) clearTimeout(suggestTimer);
+      suggestTimer = setTimeout(runSuggest, 400);
+    });
+  }
+
+  let checkTimer = null;
+  const validateEntityId = async () => {
+    if (!entInput) return;
+    const v = entInput.value.trim();
+    const isEdit = !!a?._isEdit;
+
+    // Empty allowed on create (auto), required on edit
+    if (!v) {
+      if (isEdit) {
+        setIdError(t("err_id_required"));
+        panel._idValid = false;
+      } else {
+        setIdError("");
+        panel._idValid = true;
+      }
+      panel._updateSaveBtn();
+      return;
+    }
+
+    // Quick local format check (official form only)
+    const okFormat = /^alertsys\.[a-z0-9_]+$/.test(v);
+    if (!okFormat) {
+      setIdError(t("err_id_invalid"));
+      panel._idValid = false;
+      panel._updateSaveBtn();
+      return;
+    }
+
+    try {
+      const res = await checkEntityId(panel._hass, v, isEdit ? a.id : undefined);
+      if (!res.valid) {
+        setIdError(t("err_id_invalid"));
+        panel._idValid = false;
+      } else if (!res.available) {
+        setIdError(t("err_id_exists"));
+        panel._idValid = false;
+      } else {
+        setIdError("");
+        panel._idValid = true;
+      }
+    } catch (e) {
+      setIdError(t("err_prefix") + (e.message || e));
+      panel._idValid = false;
+    }
+    panel._updateSaveBtn();
+  };
+
+  if (entInput) {
+    panel._idValid = !a?._isEdit; // create starts valid, edit will validate
+    entInput.addEventListener("input", () => {
+      if (checkTimer) clearTimeout(checkTimer);
+      checkTimer = setTimeout(validateEntityId, 300);
+    });
+    // validate once on load
+    setTimeout(validateEntityId, 0);
+  }
   // Condition live preview (unified template validator/renderer)
   const condInput = root.querySelector("#f-condition");
   const condStatus = root.querySelector("#condition-preview");

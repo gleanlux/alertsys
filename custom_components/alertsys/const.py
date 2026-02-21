@@ -2,7 +2,7 @@
 
 DOMAIN = "alertsys"
 STORAGE_KEY = f"{DOMAIN}.storage"
-STORAGE_VERSION = 1
+STORAGE_VERSION = 2
 
 # Alert config keys
 CONF_ALERTS = "alerts"
@@ -11,6 +11,7 @@ CONF_LEVEL = "level"
 CONF_CONDITION = "condition"
 CONF_AUTO_QUIT = "auto_quit"
 CONF_CATEGORY_ID = "category_id"
+CONF_DESCRIPTION = "description"
 
 # Levels
 LEVEL_INFO = "info"
@@ -30,6 +31,7 @@ ATTR_CONDITION = "condition"
 ATTR_ACK = "ack"
 ATTR_LEVEL = "level"
 ATTR_AUTO_QUIT = "auto_quit"
+ATTR_DESCRIPTION = "description"
 
 # Service names
 SERVICE_QUIT = "quit"

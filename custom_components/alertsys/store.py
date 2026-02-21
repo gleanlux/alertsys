@@ -1,14 +1,25 @@
-"""Persistent storage and runtime manager for AlertSys."""
+"""Persistent storage and runtime manager for AlertSys.
+
+This module holds two layers:
+- AlertSysStore: persistent config (alert definitions, categories)
+- AlertSysManager: runtime bridge (entities, CRUD, entity registry helpers)
+
+Design notes (v2):
+- Alerts are keyed by a generated UID (uuid4) stored as the entity unique_id.
+- The entity_id is NOT stored in our store; it is managed by the HA entity registry.
+"""
 
 from __future__ import annotations
 
 import logging
 import re
 import unicodedata
+import uuid
 from typing import Any
 
 import jinja2
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
 
 from .const import (
@@ -24,8 +35,16 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
+# -----------------------
+# ID / validation helpers
+# -----------------------
+
+_OBJECT_ID_RE = re.compile(r"^[a-z0-9_]+$")
+_ENTITY_ID_RE = re.compile(rf"^{DOMAIN}\.[a-z0-9_]+$")
+
+
 def _slugify(text: str) -> str:
-    """Convert text to a slug suitable for IDs."""
+    """Convert text to a slug suitable for object IDs."""
     text = unicodedata.normalize("NFKD", text)
     text = text.encode("ascii", "ignore").decode("ascii")
     text = text.lower().strip()
@@ -33,9 +52,24 @@ def _slugify(text: str) -> str:
     return text.strip("_")
 
 
-def _validate_slug(value: str) -> bool:
-    """Check if value is a valid slug."""
-    return bool(value) and bool(re.fullmatch(r"[a-z0-9_]+", value))
+def _validate_object_id(value: str) -> bool:
+    """Check if value is a valid HA-style object_id."""
+    return bool(value) and bool(_OBJECT_ID_RE.fullmatch(value))
+
+
+def _normalize_entity_id(entity_id: str) -> str:
+    """Normalize entity_id input."""
+    return (entity_id or "").strip().lower()
+
+
+def _validate_entity_id(entity_id: str) -> bool:
+    """Check if entity_id is in official form: alertsys.<object_id>."""
+    entity_id = _normalize_entity_id(entity_id)
+    return bool(entity_id) and bool(_ENTITY_ID_RE.fullmatch(entity_id))
+
+
+def _object_id_from_entity_id(entity_id: str) -> str:
+    return _normalize_entity_id(entity_id).split(".", 1)[1]
 
 
 def _validate_condition(condition: str) -> str | None:
@@ -64,6 +98,7 @@ class AlertSysStore:
         stored = await self._store.async_load()
         if stored:
             self._data = stored
+
         # Ensure default category always exists
         if DEFAULT_CATEGORY_ID not in self._data.get("categories", {}):
             self._data.setdefault("categories", {})[DEFAULT_CATEGORY_ID] = {
@@ -76,7 +111,7 @@ class AlertSysStore:
 
     @property
     def alerts(self) -> dict[str, dict]:
-        """Return all alert definitions."""
+        """Return all alert definitions (keyed by uid)."""
         return self._data.get("alerts", {})
 
     @property
@@ -84,14 +119,14 @@ class AlertSysStore:
         """Return all categories."""
         return self._data.get("categories", {})
 
-    def get_alert(self, alert_id: str) -> dict | None:
-        return self._data["alerts"].get(alert_id)
+    def get_alert(self, alert_uid: str) -> dict | None:
+        return self._data["alerts"].get(alert_uid)
 
-    def set_alert(self, alert_id: str, alert_data: dict) -> None:
-        self._data["alerts"][alert_id] = alert_data
+    def set_alert(self, alert_uid: str, alert_data: dict) -> None:
+        self._data["alerts"][alert_uid] = alert_data
 
-    def remove_alert(self, alert_id: str) -> dict | None:
-        return self._data["alerts"].pop(alert_id, None)
+    def remove_alert(self, alert_uid: str) -> dict | None:
+        return self._data["alerts"].pop(alert_uid, None)
 
     def set_category(self, category_id: str, category_data: dict) -> None:
         self._data["categories"][category_id] = category_data
@@ -121,8 +156,9 @@ class AlertSysManager:
     def __init__(self, hass: HomeAssistant, store: AlertSysStore) -> None:
         self.hass = hass
         self.store = store
+
         # Runtime entity tracking (populated by entity platform)
-        self._alert_entities: dict[str, Any] = {}  # alert_id -> AlertEntity
+        self._alert_entities: dict[str, Any] = {}  # uid -> AlertEntity
         self._counter_entities: dict[str, Any] = {}  # level -> CounterEntity
         self._async_add_entities_cb = None  # set by entity platform
 
@@ -131,23 +167,23 @@ class AlertSysManager:
         self._async_add_entities_cb = cb
 
     @callback
-    def register_alert_entity(self, alert_id: str, entity) -> None:
+    def register_alert_entity(self, alert_uid: str, entity) -> None:
         """Register a live alert entity."""
-        self._alert_entities[alert_id] = entity
+        self._alert_entities[alert_uid] = entity
 
     @callback
-    def unregister_alert_entity(self, alert_id: str) -> None:
+    def unregister_alert_entity(self, alert_uid: str) -> None:
         """Unregister an alert entity."""
-        self._alert_entities.pop(alert_id, None)
+        self._alert_entities.pop(alert_uid, None)
 
     @callback
     def register_counter_entity(self, level: str, entity) -> None:
         """Register a live counter entity."""
         self._counter_entities[level] = entity
 
-    def get_alert_entity(self, alert_id: str):
-        """Get a live alert entity by alert_id."""
-        return self._alert_entities.get(alert_id)
+    def get_alert_entity(self, alert_uid: str):
+        """Get a live alert entity by UID."""
+        return self._alert_entities.get(alert_uid)
 
     def get_alert_entity_by_entity_id(self, entity_id: str):
         """Get a live alert entity by full entity_id."""
@@ -171,17 +207,107 @@ class AlertSysManager:
             return AUTO_QUIT_DEFAULTS.get(alert_data["level"], True)
         return bool(aq)
 
+    # -----------------------
+    # Entity registry helpers
+    # -----------------------
+
+    def _registry(self) -> er.EntityRegistry:
+        return er.async_get(self.hass)
+
+    async def async_get_entity_id(self, alert_uid: str) -> str | None:
+        """Get current entity_id for a UID from the entity registry."""
+        return self._registry().async_get_entity_id(DOMAIN, DOMAIN, alert_uid)
+
+    async def async_entity_id_available(self, entity_id: str, exclude_uid: str | None = None) -> bool:
+        """Check entity_id availability in the entity registry."""
+        entity_id = _normalize_entity_id(entity_id)
+        entry = self._registry().async_get(entity_id)
+        if entry is None:
+            return True
+        if exclude_uid and entry.domain == DOMAIN and entry.platform == DOMAIN and entry.unique_id == exclude_uid:
+            return True
+        return False
+
+    async def async_suggest_entity_id(self, name: str, exclude_uid: str | None = None) -> str:
+        """Suggest a free entity_id for a given name (auto numbering on conflicts)."""
+        base = _slugify(name or "") or "alert"
+        if not _validate_object_id(base):
+            base = "alert"
+
+        candidate = base
+        suffix = 1
+        while True:
+            entity_id = f"{DOMAIN}.{candidate}"
+            if await self.async_entity_id_available(entity_id, exclude_uid=exclude_uid):
+                return entity_id
+            suffix += 1
+            candidate = f"{base}_{suffix}"
+
+    async def async_create_registry_entry(self, alert_uid: str, name: str, entity_id: str | None = None, *, strict: bool = False) -> str:
+        """Ensure registry entry exists for UID, optionally targeting a specific entity_id."""
+        reg = self._registry()
+
+        current = reg.async_get_entity_id(DOMAIN, DOMAIN, alert_uid)
+        if current and entity_id is None:
+            return current
+
+        if entity_id is not None:
+            entity_id = _normalize_entity_id(entity_id)
+            if not _validate_entity_id(entity_id):
+                raise ValueError("Invalid entity_id format")
+            if not await self.async_entity_id_available(entity_id, exclude_uid=alert_uid):
+                raise ValueError("Entity ID already exists")
+            object_id = _object_id_from_entity_id(entity_id)
+        else:
+            entity_id = await self.async_suggest_entity_id(name, exclude_uid=alert_uid)
+            object_id = _object_id_from_entity_id(entity_id)
+
+        entry = reg.async_get_or_create(
+            domain=DOMAIN,
+            platform=DOMAIN,
+            unique_id=alert_uid,
+            suggested_object_id=object_id,
+            original_name=name,
+        )
+
+        # If user requested a specific entity_id, enforce it strictly.
+        if strict and entity_id and entry.entity_id != entity_id:
+            raise ValueError("Entity ID could not be reserved")
+
+        return entry.entity_id
+
+    async def async_rename_entity_id(self, alert_uid: str, new_entity_id: str) -> str:
+        """Rename the entity_id for a UID via the entity registry."""
+        new_entity_id = _normalize_entity_id(new_entity_id)
+        if not _validate_entity_id(new_entity_id):
+            raise ValueError("Invalid entity_id format")
+
+        reg = self._registry()
+        current = reg.async_get_entity_id(DOMAIN, DOMAIN, alert_uid)
+        if current is None:
+            # No entry yet; create it
+            return await self.async_create_registry_entry(alert_uid, name="Alert", entity_id=new_entity_id, strict=True)
+
+        if current == new_entity_id:
+            return current
+
+        if not await self.async_entity_id_available(new_entity_id, exclude_uid=alert_uid):
+            raise ValueError("Entity ID already exists")
+
+        reg.async_update_entity(current, new_entity_id=new_entity_id)
+        return new_entity_id
+
+    # -------------
+    # CRUD عمليات
+    # -------------
+
     async def async_create_alert(self, data: dict) -> dict:
-        """Create a new alert. Returns the full alert dict with id."""
+        """Create a new alert. Returns the full alert dict with uid + entity_id."""
         from .entity import AlertEntity  # avoid circular import
 
         name = data["name"].strip()
-        alert_id = data.get("id") or _slugify(name)
-        if not _validate_slug(alert_id):
-            raise ValueError(f"Invalid alert ID: {alert_id!r}")
-
-        if alert_id in self.store.alerts:
-            raise ValueError(f"Alert ID already exists: {alert_id!r}")
+        if not name:
+            raise ValueError("Name must not be empty")
 
         level = data.get("level", "info")
         if level not in VALID_LEVELS:
@@ -194,13 +320,21 @@ class AlertSysManager:
 
         category_id = data.get("category_id") or DEFAULT_CATEGORY_ID
         if category_id not in self.store.categories:
-            # Auto-create category
             cat_name = data.get("category_name", category_id)
             self.store.set_category(category_id, {"name": cat_name})
 
         auto_quit = data.get("auto_quit")  # None, True, or False
-
         notification = data.get("notification") or {}
+
+        description = (data.get("description") or "").strip()
+        if len(description) > 255:
+            raise ValueError("Description too long")
+
+        alert_uid = str(uuid.uuid4())
+
+        # Reserve/create entity registry entry
+        requested_entity_id = data.get("entity_id")
+        entity_id = await self.async_create_registry_entry(alert_uid, name=name, entity_id=requested_entity_id, strict=bool(requested_entity_id))
 
         alert_def = {
             "name": name,
@@ -209,41 +343,42 @@ class AlertSysManager:
             "auto_quit": auto_quit,
             "category_id": category_id,
             "notification": notification,
+            "description": description,
         }
-        self.store.set_alert(alert_id, alert_def)
+        self.store.set_alert(alert_uid, alert_def)
         await self.store.async_save()
 
         # Create and register entity
         if self._async_add_entities_cb:
             effective_aq = self.resolve_auto_quit(alert_def)
             entity = AlertEntity(
-                self.hass, alert_id, name, level, condition.strip(), effective_aq, self,
+                hass=self.hass,
+                uid=alert_uid,
+                name=name,
+                level=level,
+                condition_config=condition.strip(),
+                auto_quit=effective_aq,
+                manager=self,
                 notification_config=notification,
+                description=description,
             )
             self._async_add_entities_cb([entity])
 
-        return {**alert_def, "id": alert_id}
+        return {**alert_def, "id": alert_uid, "entity_id": entity_id}
 
-    async def async_update_alert(self, alert_id: str, data: dict) -> dict:
-        """Update an existing alert (remove + recreate entity)."""
+    async def async_update_alert(self, alert_uid: str, data: dict) -> dict:
+        """Update an existing alert."""
         from .entity import AlertEntity
 
-        existing = self.store.get_alert(alert_id)
+        existing = self.store.get_alert(alert_uid)
         if existing is None:
-            raise ValueError(f"Alert not found: {alert_id!r}")
-
-        # Handle ID rename
-        new_alert_id = data.pop("new_alert_id", None)
-        target_id = alert_id
-        if new_alert_id and new_alert_id != alert_id:
-            if not _validate_slug(new_alert_id):
-                raise ValueError(f"Invalid alert ID: {new_alert_id!r}")
-            if new_alert_id in self.store.alerts:
-                raise ValueError(f"Alert ID already exists: {new_alert_id!r}")
-            target_id = new_alert_id
+            raise ValueError(f"Alert not found: {alert_uid!r}")
 
         # Merge fields
         name = data.get("name", existing["name"]).strip()
+        if not name:
+            raise ValueError("Name must not be empty")
+
         level = data.get("level", existing["level"])
         if level not in VALID_LEVELS:
             raise ValueError(f"Invalid level: {level!r}")
@@ -256,14 +391,20 @@ class AlertSysManager:
         auto_quit = data.get("auto_quit", existing.get("auto_quit"))
 
         old_category = existing.get("category_id", DEFAULT_CATEGORY_ID)
-        category_id = data.get("category_id", old_category)
-        if not category_id:
-            category_id = DEFAULT_CATEGORY_ID
+        category_id = data.get("category_id", old_category) or DEFAULT_CATEGORY_ID
         if category_id not in self.store.categories:
             cat_name = data.get("category_name", category_id)
             self.store.set_category(category_id, {"name": cat_name})
 
         notification = data.get("notification", existing.get("notification", {})) or {}
+
+        description = (data.get("description", existing.get("description", "")) or "").strip()
+        if len(description) > 255:
+            raise ValueError("Description too long")
+
+        # Optionally rename entity_id
+        if "entity_id" in data and data.get("entity_id") is not None:
+            await self.async_rename_entity_id(alert_uid, data["entity_id"])
 
         alert_def = {
             "name": name,
@@ -272,49 +413,59 @@ class AlertSysManager:
             "auto_quit": auto_quit,
             "category_id": category_id,
             "notification": notification,
+            "description": description,
         }
 
-        # If ID changed, remove old entry first
-        if target_id != alert_id:
-            self.store.remove_alert(alert_id)
-
-        self.store.set_alert(target_id, alert_def)
+        self.store.set_alert(alert_uid, alert_def)
         self.store.cleanup_empty_categories()
         await self.store.async_save()
 
-        # Remove old entity and create new one
-        old_entity = self._alert_entities.get(alert_id)
+        # Recreate entity (simple and robust)
+        old_entity = self._alert_entities.get(alert_uid)
         if old_entity:
             await old_entity.async_remove()
-            self.unregister_alert_entity(alert_id)
+            self.unregister_alert_entity(alert_uid)
 
         if self._async_add_entities_cb:
             effective_aq = self.resolve_auto_quit(alert_def)
             entity = AlertEntity(
-                self.hass, target_id, name, level, condition.strip(), effective_aq, self,
+                hass=self.hass,
+                uid=alert_uid,
+                name=name,
+                level=level,
+                condition_config=condition.strip(),
+                auto_quit=effective_aq,
+                manager=self,
                 notification_config=notification,
+                description=description,
             )
             self._async_add_entities_cb([entity])
 
-        # Update counters
         self._update_all_counters()
 
-        return {**alert_def, "id": target_id}
+        entity_id = await self.async_get_entity_id(alert_uid)
+        return {**alert_def, "id": alert_uid, "entity_id": entity_id}
 
-    async def async_delete_alert(self, alert_id: str) -> None:
+    async def async_delete_alert(self, alert_uid: str) -> None:
         """Delete an alert."""
-        existing = self.store.get_alert(alert_id)
+        existing = self.store.get_alert(alert_uid)
         if existing is None:
-            raise ValueError(f"Alert not found: {alert_id!r}")
+            raise ValueError(f"Alert not found: {alert_uid!r}")
 
-        self.store.remove_alert(alert_id)
+        self.store.remove_alert(alert_uid)
         self.store.cleanup_empty_categories()
         await self.store.async_save()
 
-        old_entity = self._alert_entities.get(alert_id)
+        old_entity = self._alert_entities.get(alert_uid)
         if old_entity:
             await old_entity.async_remove()
-            self.unregister_alert_entity(alert_id)
+            self.unregister_alert_entity(alert_uid)
+
+        # Remove entity registry entry (free up entity_id)
+        reg = self._registry()
+        entity_id = reg.async_get_entity_id(DOMAIN, DOMAIN, alert_uid)
+        if entity_id:
+            reg.async_remove(entity_id)
 
         self._update_all_counters()
 
@@ -325,15 +476,14 @@ class AlertSysManager:
             counter.async_schedule_update_ha_state()
 
     def list_alerts(self) -> list[dict]:
-        """Return all alert definitions with their IDs."""
-        result = []
-        for aid, adef in self.store.alerts.items():
-            result.append({**adef, "id": aid})
+        """Return all alert definitions with their UID + entity_id."""
+        reg = self._registry()
+        result: list[dict] = []
+        for uid, adef in self.store.alerts.items():
+            entity_id = reg.async_get_entity_id(DOMAIN, DOMAIN, uid)
+            result.append({**adef, "id": uid, "entity_id": entity_id})
         return result
 
     def list_categories(self) -> list[dict]:
         """Return all categories with their IDs."""
-        result = []
-        for cid, cdef in self.store.categories.items():
-            result.append({**cdef, "id": cid})
-        return result
+        return [{**cdef, "id": cid} for cid, cdef in self.store.categories.items()]

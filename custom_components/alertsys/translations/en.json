@@ -116,17 +116,17 @@
     "err_name_required": "Name is required.",
     "err_condition_required": "Condition is required.",
     "err_condition_invalid": "Condition does not evaluate to a valid boolean value.",
-    "err_id_invalid": "Entity ID is invalid or already exists.",
+    "err_id_invalid": "Invalid Entity ID. Use: alertsys.<lowercase_letters_numbers_underscores>",
     "err_category_required": "Enter a name for the new category.",
     "err_notif_data_json": "Notification data is not valid JSON.",
     "err_resolve_data_json": "Resolve notification data is not valid JSON.",
     "err_targets_required": "At least one notification target is required when notifications are enabled.",
     "err_notif_templates_invalid": "One or more notification templates are invalid: {fields}.",
-     "err_repeat_interval_min": "Repeat interval must be at least 5 seconds when repeat count is greater than 0.",
+    "err_repeat_interval_min": "Repeat interval must be at least 5 seconds when repeat count is greater than 0.",
     "err_repeat_count_min": "Repeat count cannot be negative.",
-    "err_id_required": "ID is required.",
+    "err_id_required": "Entity ID is required.",
     "err_id_empty": "Required",
-    "err_id_exists": "Already exists",
+    "err_id_exists": "Entity ID already exists.",
     "err_prefix": "Error: ",
     "confirm_delete": "Delete alert \"{name}\"?",
     "preview_entity_state": "Entity state: {val}",
@@ -137,6 +137,8 @@
     "preview_template_ok": "Template syntax OK",
     "preview_syntax_error": "Syntax error: {error}",
     "tooltip_condition_bool": "Condition must evaluate to a boolean value",
-    "tooltip_fix_id": "Fix the Entity ID issue first"
+    "tooltip_fix_id": "Fix the Entity ID issue first",
+    "field_description": "Description",
+    "ph_description": "Optional short description (max 255 chars)"
   }
 }

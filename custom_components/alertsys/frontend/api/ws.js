@@ -22,9 +22,9 @@ export async function updateAlert(hass, payload) {
   return hass.callWS({ type: "alertsys/alert/update", ...payload });
 }
 
-export async function deleteAlert(hass, alert_id) {
+export async function deleteAlert(hass, alert_uid) {
   assertHass(hass);
-  return hass.callWS({ type: "alertsys/alert/delete", alert_id });
+  return hass.callWS({ type: "alertsys/alert/delete", alert_uid });
 }
 
 export async function listCategories(hass) {
@@ -45,4 +45,19 @@ export async function testNotification(hass, payload) {
 export async function getTranslations(hass, language) {
   assertHass(hass);
   return hass.callWS({ type: "alertsys/get_translations", language });
+}
+
+
+export async function suggestEntityId(hass, name, alert_uid) {
+  assertHass(hass);
+  const payload = { type: "alertsys/entity_id/suggest", name };
+  if (alert_uid) payload.alert_uid = alert_uid;
+  return hass.callWS(payload);
+}
+
+export async function checkEntityId(hass, entity_id, alert_uid) {
+  assertHass(hass);
+  const payload = { type: "alertsys/entity_id/check", entity_id };
+  if (alert_uid) payload.alert_uid = alert_uid;
+  return hass.callWS(payload);
 }

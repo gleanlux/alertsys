@@ -90,17 +90,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Create alert entities from stored definitions
     alert_entities = []
-    for alert_id, alert_def in store.alerts.items():
+    for alert_uid, alert_def in store.alerts.items():
+        # Ensure there is an entity registry entry for this UID
+        try:
+            await manager.async_create_registry_entry(alert_uid, name=alert_def.get("name", "Alert"))
+        except Exception as exc:
+            _LOGGER.warning("Failed to ensure registry entry for %s: %s", alert_uid, exc)
         effective_aq = manager.resolve_auto_quit(alert_def)
         entity = AlertEntity(
             hass=hass,
-            object_id=alert_id,
+            uid=alert_uid,
             name=alert_def["name"],
             level=alert_def["level"],
             condition_config=alert_def["condition"],
             auto_quit=effective_aq,
             manager=manager,
             notification_config=alert_def.get("notification"),
+            description=alert_def.get("description", ""),
         )
         alert_entities.append(entity)
     if alert_entities:

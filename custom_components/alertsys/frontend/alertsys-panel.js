@@ -139,7 +139,7 @@ class AlertSysPanel extends HTMLElement {
 
   // --- View routing helpers (used by views/list.js) ---
   _openNew() {
-    this._editingAlert = { name: "", level: "info", condition: "", auto_quit: null, category_id: "default" };
+    this._editingAlert = { name: "", entity_id: "", description: "", level: "info", condition: "", auto_quit: null, category_id: "default" };
     this._render();
   }
 
@@ -365,8 +365,8 @@ class AlertSysPanel extends HTMLElement {
     const name = root?.querySelector("#f-name")?.value?.trim?.() || "";
     const level = root?.querySelector("#f-level")?.value || "info";
     const condition = root?.querySelector("#f-condition")?.value?.trim?.() || "";
-    const idSuffix = root?.querySelector("#f-id")?.value?.trim?.() || "preview";
-    const entity_id = `alertsys.${idSuffix || "preview"}`;
+    const entEl = root?.querySelector("#f-entity-id");
+    const entity_id = entEl?.value?.trim?.() || entEl?.placeholder?.trim?.() || "alertsys.preview";
     return {
       name,
       level,
@@ -383,6 +383,8 @@ class AlertSysPanel extends HTMLElement {
     errDiv.style.display = "none";
 
     const name = this.shadowRoot.querySelector("#f-name").value.trim();
+    const entity_id = this.shadowRoot.querySelector("#f-entity-id").value.trim();
+    const description = this.shadowRoot.querySelector("#f-description").value.trim();
     const level = this.shadowRoot.querySelector("#f-level").value;
     const condition = this.shadowRoot.querySelector("#f-condition").value.trim();
     const aqOvr = this.shadowRoot.querySelector("#f-aq-override").checked;
@@ -478,19 +480,14 @@ class AlertSysPanel extends HTMLElement {
     // NOTE: Do not block saving if notification config is incomplete.
     // Users may want to save a draft while still editing notification targets/templates.
 
-    // Build new alert_id from editable suffix if editing
-    let new_alert_id = undefined;
-    if (isEdit) {
-      const idSuffix = this.shadowRoot.querySelector("#f-id")?.value.trim();
-      if (!idSuffix) { this._showError(this._t("err_id_required")); return; }
-      new_alert_id = idSuffix;
-    }
+    // entity_id is optional on create; required on edit
+    if (isEdit && !entity_id) { this._showError(this._t("err_id_required")); return; }
 
         try {
       if (isEdit) {
-        await updateAlert(this._hass, { alert_id: this._editingAlert.id, new_alert_id, name, level, condition, auto_quit, category_id, category_name, notification });
+        await updateAlert(this._hass, { alert_uid: this._editingAlert.id, entity_id, description, name, level, condition, auto_quit, category_id, category_name, notification });
       } else {
-        await createAlert(this._hass, { name, level, condition, auto_quit, category_id, category_name, notification });
+        await createAlert(this._hass, { entity_id: entity_id || undefined, description, name, level, condition, auto_quit, category_id, category_name, notification });
       }
       this._closeForm();
       await this._loadData();
@@ -503,9 +500,9 @@ class AlertSysPanel extends HTMLElement {
     const btn = this.shadowRoot?.querySelector("#btn-save");
     if (!btn) return;
 
-    // Do not disable the button (per UX decision). Validation happens on save,
-    // and we still show tooltips to guide the user.
-    btn.disabled = false;
+    // Disable save when hard validation fails (entity_id / condition)
+    const hardInvalid = this._conditionValid === false || this._idValid === false;
+    btn.disabled = hardInvalid;
 
     if (this._conditionValid === false) {
       btn.title = this._t("tooltip_condition_bool");
