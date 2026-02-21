@@ -489,10 +489,10 @@ export function bindAlertForm(panel) {
 
   // Template syntax validation
   const tplFields = [
-    { input: "#f-notif-title", status: "#tpl-status-title" },
-    { input: "#f-notif-message", status: "#tpl-status-message" },
-    { input: "#f-notif-resolve-title", status: "#tpl-status-resolve-title" },
-    { input: "#f-notif-resolve-msg", status: "#tpl-status-resolve-message" },
+    { input: "#f-notif-title", status: "#tpl-status-title", key: "title" },
+    { input: "#f-notif-message", status: "#tpl-status-message", key: "message" },
+    { input: "#f-notif-resolve-title", status: "#tpl-status-resolve-title", key: "resolve_title" },
+    { input: "#f-notif-resolve-msg", status: "#tpl-status-resolve-message", key: "resolve_message" },
   ];
 
   for (const tf of tplFields) {
@@ -509,6 +509,11 @@ export function bindAlertForm(panel) {
         render: true,
         requireBoolean: false,
         getVariables: () => (typeof panel._getTemplatePreviewVariables === "function" ? panel._getTemplatePreviewVariables() : null),
+        onValidityChange: (v) => {
+          if (!panel._notifTplValidity) panel._notifTplValidity = {};
+          panel._notifTplValidity[tf.key] = v;
+          panel._updateSaveBtn();
+        },
         baseClass: "tpl-status",
         okClass: "ok",
         errorClass: "error",

@@ -31,6 +31,8 @@ class AlertSysPanel extends HTMLElement {
     this._categories = [];
     this._editingAlert = null; // null = list view, {} = new, {id:...} = editing
     this._conditionValid = null; // null = unknown, true/false
+    // Live template validity for notification fields (title/message/resolve_*)
+    this._notifTplValidity = { title: null, message: null, resolve_title: null, resolve_message: null };
     this._notifyServices = []; // cached from WS
     this._autoQuitDefaults = { info: true, warning: true, error: false }; // overwritten from backend
     this._notifDefaults = { title: "", message: "", resolve_message: "" }; // overwritten from backend
@@ -456,10 +458,25 @@ class AlertSysPanel extends HTMLElement {
       }
     }
 
-    if (notification.enabled && notification.targets.length === 0) {
-      this._showError(this._t("err_targets_required"));
-      return;
+
+    // Block saving if any *active* notification template field has a template error.
+    if (notification.enabled) {
+      const invalid = [];
+      const v = this._notifTplValidity || {};
+      if (v.title === false) invalid.push(this._t("field_title"));
+      if (v.message === false) invalid.push(this._t("field_message"));
+      if (notification.send_resolve) {
+        if (v.resolve_title === false) invalid.push(this._t("field_resolve_title"));
+        if (v.resolve_message === false) invalid.push(this._t("field_resolve_message"));
+      }
+      if (invalid.length) {
+        this._showError(this._t("err_notif_templates_invalid", { fields: invalid.join(", ") }));
+        return;
+      }
     }
+
+    // NOTE: Do not block saving if notification config is incomplete.
+    // Users may want to save a draft while still editing notification targets/templates.
 
     // Build new alert_id from editable suffix if editing
     let new_alert_id = undefined;
@@ -511,6 +528,7 @@ class AlertSysPanel extends HTMLElement {
     this._runCleanup();
     this._editingAlert = null;
     this._conditionValid = null;
+    this._notifTplValidity = { title: null, message: null, resolve_title: null, resolve_message: null };
     this._idValid = true;
     this._render();
   }
