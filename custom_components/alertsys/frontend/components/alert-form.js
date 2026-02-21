@@ -155,7 +155,7 @@ export function renderAlertForm(panel) {
 
         <div class="form-field">
           <label>${esc(t("field_data"))}</label>
-          <textarea id="f-notif-data" rows="2" placeholder='${esc(
+          <textarea id="f-notif-data" rows="5" placeholder='${esc(
     t("ph_data_json")
   )}'>${nc.data ? JSON.stringify(nc.data, null, 2) : ""}</textarea>
         </div>
@@ -209,7 +209,7 @@ export function renderAlertForm(panel) {
           </div>
           <div class="form-field">
             <label>${esc(t("field_resolve_data"))}</label>
-            <textarea id="f-notif-resolve-data" rows="2" placeholder='${esc(
+            <textarea id="f-notif-resolve-data" rows="5" placeholder='${esc(
     t("ph_data_json")
   )}'>${nc.resolve_data ? JSON.stringify(nc.resolve_data, null, 2) : ""}</textarea>
           </div>
@@ -399,7 +399,7 @@ export function bindAlertForm(panel) {
     statusEl.textContent = t("status_sending");
     statusEl.style.color = "";
     try {
-      await testNotification(panel._hass, { targets, title, message, data, ...getTestContext() });
+      await testNotification(panel._hass, { targets, title, message, data, is_resolve: false, ...getTestContext() });
       statusEl.textContent = t("status_sent");
       statusEl.style.color = "var(--success-color)";
     } catch (e) {
@@ -427,7 +427,7 @@ export function bindAlertForm(panel) {
     statusEl.textContent = t("status_sending");
     statusEl.style.color = "";
     try {
-      await testNotification(panel._hass, { targets, title, message, data, ...getTestContext() });
+      await testNotification(panel._hass, { targets, title, message, data, is_resolve: true, ...getTestContext() });
       statusEl.textContent = t("status_sent");
       statusEl.style.color = "var(--success-color)";
     } catch (e) {

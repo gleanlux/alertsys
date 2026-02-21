@@ -28,6 +28,7 @@ from .const import (
     ATTR_DESCRIPTION,
     COUNTER_ENTITY_IDS,
     DOMAIN,
+    NOTIF_DEFAULT_TITLE,
     NOTIF_DEFAULT_MESSAGE,
     NOTIF_DEFAULT_RESOLVE_MESSAGE,
 )
@@ -401,6 +402,8 @@ class AlertEntity(RestoreEntity):
             return
 
         title = self._render_notification_template(nc.get("title", ""))
+        if not title:
+            title = self._render_notification_template(NOTIF_DEFAULT_TITLE)
         message = self._render_notification_template(nc.get("message", ""))
         if not message:
             message = self._render_notification_template(NOTIF_DEFAULT_MESSAGE)
@@ -437,12 +440,12 @@ class AlertEntity(RestoreEntity):
     async def _async_send_resolve_notification(self) -> None:
         """Send resolve notification to all configured targets."""
         nc = self._notification_config
+
         title = self._render_notification_template(nc.get("resolve_title", ""))
         if not title:
-            title = self._render_notification_template(nc.get("title", ""))
-        message = self._render_notification_template(
-            nc.get("resolve_message", "")
-        )
+            title = self._render_notification_template(NOTIF_DEFAULT_TITLE)
+        
+        message = self._render_notification_template(nc.get("resolve_message", ""))
         if not message:
             message = self._render_notification_template(NOTIF_DEFAULT_RESOLVE_MESSAGE)
 

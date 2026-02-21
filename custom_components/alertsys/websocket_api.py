@@ -265,8 +265,9 @@ async def ws_notify_services(hass, connection, msg):
     vol.Required("type"): "alertsys/test_notification",
     vol.Required("targets"): [str],
     vol.Optional("title", default=""): str,
-    vol.Optional("message", default="Test notification from AlertSys"): str,
+    vol.Optional("message", default=""): str,
     vol.Optional("data"): vol.Any(None, dict),
+    vol.Optional("is_resolve", default=False): bool,
     # Context fields for Jinja2 rendering
     vol.Optional("context_name", default="Test Alert"): str,
     vol.Optional("context_level", default="info"): str,
@@ -297,9 +298,13 @@ async def ws_test_notification(hass, connection, msg):
                 return template_str
 
         rendered_title = _render(msg.get("title", ""))
-        rendered_message = _render(msg.get("message", ""))
-        if not rendered_message:
-            rendered_message = "Test notification from AlertSys"
+        if not rendered_title:
+            rendered_title = _render(NOTIF_DEFAULT_TITLE)
+
+        message_tpl = msg.get("message", "")
+        if not message_tpl:
+            message_tpl = NOTIF_DEFAULT_RESOLVE_MESSAGE if msg.get("is_resolve") else NOTIF_DEFAULT_MESSAGE
+        rendered_message = _render(message_tpl)
 
         errors = []
         for target in msg["targets"]:

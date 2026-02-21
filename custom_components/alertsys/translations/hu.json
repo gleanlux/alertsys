@@ -90,6 +90,7 @@
     "ph_new_category": "Új kategória neve",
     "ph_select_target": "-- Válasszon célpontot --",
     "ph_title_template": "Jinja2 sablon. Változók: name, level, condition, entity_id, count, triggered_at",
+    "ph_data_json": "{\n\"ttl\": 0,\n\"priority\":\"high\",\n\"channel\":\"alarm_stream\"\n}",
     "ph_resolve_title": "Hagyja üresen az értesítés nevének használatához",
     "hint_repeat_interval_min": "Minimum 5 másodperc.",
     "hint_repeat_count_zero": "0 = nincs ismétlés (csak egyszer küld)",

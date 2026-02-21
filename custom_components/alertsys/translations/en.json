@@ -90,7 +90,7 @@
     "ph_new_category": "New category name",
     "ph_select_target": "-- Select target --",
     "ph_title_template": "Jinja2 template. Variables: name, level, condition, entity_id, count, triggered_at",
-    "ph_data_json": "{\"key\": \"value\"}",
+    "ph_data_json": "{\n\"ttl\": 0,\n\"priority\":\"high\",\n\"channel\":\"alarm_stream\"\n}",
     "ph_resolve_title": "Leave empty to use alert title",
     "hint_repeat_interval_min": "Minimum 5 seconds.",
     "hint_repeat_count_zero": "0 = no repeat (send once)",
