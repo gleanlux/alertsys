@@ -12,12 +12,12 @@
   },
   "services": {
     "quit": {
-      "name": "Acknowledge and close alert",
-      "description": "Reset alert to idle state. Only works if the alert condition is no longer active. Without an entity, acknowledges all closable alerts.",
+      "name": "Quit alert",
+      "description": "Reset alert to idle state. Only works if the alert condition is no longer active. Without an entity, quit all alerts.",
       "fields": {
         "entity_id": {
           "name": "Entity",
-          "description": "The alert entity to close. Leave empty for all closable alerts."
+          "description": "The alert entity to quit. Leave empty for all alerts."
         }
       }
     },
