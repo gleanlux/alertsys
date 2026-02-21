@@ -33,6 +33,8 @@ class AlertSysPanel extends HTMLElement {
     this._conditionPreview = "";
     this._conditionPreviewTimer = null;
     this._templateUnsub = null;
+    this._conditionEvalSeq = 0; // monotonic sequence to ignore stale async results
+    this._conditionWatchdogTimer = null; // timeout if render_template doesn't respond
     this._conditionValid = null; // null = unknown, true/false
     this._notifyServices = []; // cached from WS
     this._autoQuitDefaults = { info: true, warning: true, error: false }; // overwritten from backend
@@ -354,6 +356,10 @@ class AlertSysPanel extends HTMLElement {
   }
 
   _unsubTemplatePreview() {
+    if (this._conditionWatchdogTimer) {
+      clearTimeout(this._conditionWatchdogTimer);
+      this._conditionWatchdogTimer = null;
+    }
     if (this._templateUnsub) {
       try {
         const p = this._templateUnsub();
@@ -367,6 +373,8 @@ class AlertSysPanel extends HTMLElement {
     const preview = this.shadowRoot?.querySelector("#condition-preview");
     if (!preview) return;
 
+    const seq = ++this._conditionEvalSeq;
+
     condition = condition.trim();
     if (!condition) {
       preview.textContent = "";
@@ -375,8 +383,8 @@ class AlertSysPanel extends HTMLElement {
       return;
     }
 
-    // If it looks like an entity_id (no {{ }})
-    if (!condition.includes("{{")) {
+    // If it looks like an entity_id (no template markers)
+    if (!condition.includes("{{") && !condition.includes("{%")) {
       const state = this._hass?.states?.[condition];
       if (state) {
         const val = state.state;
@@ -393,37 +401,105 @@ class AlertSysPanel extends HTMLElement {
       return;
     }
 
-    // Jinja2 template – use HA's render_template subscription
+    // Jinja2 template – 2-step pipeline: (1) syntax validate, (2) evaluate
+    // Step 1: explicit syntax validation so we can always show syntax errors.
     try {
+      // Mark as invalid while we validate/evaluate. Save is still clickable, but will show error.
+      this._conditionValid = false;
+      this._updateSaveBtn();
+
+      // Backend validator should return { valid: boolean, error?: string }
+      const callWS = this._hass.callWS
+        ? this._hass.callWS.bind(this._hass)
+        : this._hass.connection.sendMessagePromise.bind(this._hass.connection);
+      const v = await callWS({ type: "alertsys/validate_template", template: condition });
+      if (seq !== this._conditionEvalSeq) return; // stale result
+
+      if (v && v.valid === false) {
+        const err = v.error || v.message || "Template syntax error";
+        preview.textContent = this._t("preview_template_error", { error: err });
+        preview.className = "condition-preview error";
+        this._conditionValid = false;
+        this._updateSaveBtn();
+        return;
+      }
+    } catch (e) {
+      if (seq !== this._conditionEvalSeq) return; // stale result
+      preview.textContent = this._t("preview_template_error", { error: e?.message || String(e) });
+      preview.className = "condition-preview error";
+      this._conditionValid = false;
+      this._updateSaveBtn();
+      return;
+    }
+
+    // Step 2: evaluation via HA's render_template subscription
+    let gotFirst = false;
+    try {
+      // Watchdog: HA sometimes doesn't emit an event on certain errors. Ensure we show *something*.
+      if (this._conditionWatchdogTimer) {
+        clearTimeout(this._conditionWatchdogTimer);
+        this._conditionWatchdogTimer = null;
+      }
+      this._conditionWatchdogTimer = setTimeout(() => {
+        if (seq !== this._conditionEvalSeq) return; // stale
+        if (gotFirst) return;
+        const p = this.shadowRoot?.querySelector("#condition-preview");
+        if (!p) return;
+        p.textContent = this._t("preview_template_error", { error: "No response from template renderer." });
+        p.className = "condition-preview error";
+        this._conditionValid = false;
+        this._updateSaveBtn();
+      }, 1500);
+
       this._templateUnsub = await this._hass.connection.subscribeMessage(
         (msg) => {
+          if (seq !== this._conditionEvalSeq) return; // stale
           if (!this._connected) return;
+
+          gotFirst = true;
+          if (this._conditionWatchdogTimer) {
+            clearTimeout(this._conditionWatchdogTimer);
+            this._conditionWatchdogTimer = null;
+          }
+
           const p = this.shadowRoot?.querySelector("#condition-preview");
           if (!p) return;
-          if (msg.result !== undefined) {
-            const resStr = String(msg.result).trim().toLowerCase();
-            const boolLike = ["true", "false", "on", "off", "1", "0", "yes", "no", "none"].includes(resStr);
+
+          const payload = msg?.event ?? msg;
+          const result = payload?.result;
+          const error = payload?.error ?? msg?.error;
+
+          if (error) {
+            const err = typeof error === "string" ? error : (error.message || JSON.stringify(error));
+            p.textContent = this._t("preview_template_error", { error: err });
+            p.className = "condition-preview error";
+            this._conditionValid = false;
+          } else if (result !== undefined) {
+            const resStr = String(result).trim().toLowerCase();
+            const boolLike = ["true", "false", "on", "off", "1", "0", "yes", "no"].includes(resStr);
             const isTruthy = ["true", "on", "1", "yes"].includes(resStr);
             if (boolLike) {
-              p.textContent = this._t("preview_template_result", { result: msg.result, bool: String(isTruthy) });
+              p.textContent = this._t("preview_template_result", { result, bool: String(isTruthy) });
               p.className = "condition-preview " + (isTruthy ? "truthy" : "falsy");
               this._conditionValid = true;
             } else {
-              p.textContent = this._t("preview_template_not_bool", { result: msg.result });
+              p.textContent = this._t("preview_template_not_bool", { result });
               p.className = "condition-preview error";
               this._conditionValid = false;
             }
-          } else if (msg.error) {
-            p.textContent = this._t("preview_template_error", { error: msg.error });
-            p.className = "condition-preview error";
-            this._conditionValid = false;
           }
+
           this._updateSaveBtn();
         },
-        { type: "render_template", template: condition }
+        { type: "render_template", template: condition, strict: true }
       );
     } catch (e) {
-      preview.textContent = this._t("preview_template_error", { error: e.message || e });
+      if (seq !== this._conditionEvalSeq) return; // stale
+      if (this._conditionWatchdogTimer) {
+        clearTimeout(this._conditionWatchdogTimer);
+        this._conditionWatchdogTimer = null;
+      }
+      preview.textContent = this._t("preview_template_error", { error: e?.message || String(e) });
       preview.className = "condition-preview error";
       this._conditionValid = false;
       this._updateSaveBtn();
@@ -540,14 +616,16 @@ class AlertSysPanel extends HTMLElement {
   _updateSaveBtn() {
     const btn = this.shadowRoot?.querySelector("#btn-save");
     if (!btn) return;
+
+    // Do not disable the button (per UX decision). Validation happens on save,
+    // and we still show tooltips to guide the user.
+    btn.disabled = false;
+
     if (this._conditionValid === false) {
-      btn.disabled = true;
       btn.title = this._t("tooltip_condition_bool");
     } else if (this._idValid === false) {
-      btn.disabled = true;
       btn.title = this._t("tooltip_fix_id");
     } else {
-      btn.disabled = false;
       btn.title = "";
     }
   }
