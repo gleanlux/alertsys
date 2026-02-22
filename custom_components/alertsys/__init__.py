@@ -10,21 +10,19 @@ import voluptuous as vol
 from homeassistant.components import frontend
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.entity_component import EntityComponent
 
 from .const import (
     DOMAIN,
-    LEVEL_ERROR,
-    LEVEL_INFO,
-    LEVEL_WARNING,
     SERVICE_ACK,
     SERVICE_ACK_TOGGLE,
     SERVICE_QUIT,
     SERVICE_UNACK,
 )
-from .entity import AlertEntity, CounterEntity
+from .entity import AlertEntity
 from .store import AlertSysManager, AlertSysStore
 from .websocket_api import async_register_websocket_commands
 
@@ -33,6 +31,8 @@ _LOGGER = logging.getLogger(__name__)
 
 PANEL_URL_ROOT = f"/{DOMAIN}_panel"
 PANEL_FS_ROOT = str((Path(__file__).resolve().parent / "frontend"))
+
+PLATFORMS = [Platform.SENSOR]
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
@@ -53,9 +53,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     )
 
     component = EntityComponent[AlertEntity](_LOGGER, DOMAIN, hass)
-    counter_component = EntityComponent[CounterEntity](_LOGGER, "sensor", hass)
     hass.data[DOMAIN]["component"] = component
-    hass.data[DOMAIN]["counter_component"] = counter_component
     _register_services(hass, component)
 
     return True
@@ -71,16 +69,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     manager = AlertSysManager(hass, store)
     hass.data[DOMAIN]["manager"] = manager
 
-    # Use the domain-level components created in async_setup
+    # Use the domain-level component created in async_setup
     component: EntityComponent[AlertEntity] = hass.data[DOMAIN]["component"]
-    counter_component: EntityComponent[CounterEntity] = hass.data[DOMAIN]["counter_component"]
 
-    # Create counter entities first (alerts may trigger counter updates immediately)
-    counter_entities = []
-    for level in (LEVEL_INFO, LEVEL_WARNING, LEVEL_ERROR):
-        counter = CounterEntity(hass, level, manager)
-        counter_entities.append(counter)
-    await counter_component.async_add_entities(counter_entities)
+    # Forward sensor platform → creates CounterEntity instances via sensor.py
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     # Provide the add_entities callback to the manager for dynamic CRUD
     def add_entities_cb(entities):
@@ -146,15 +139,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         for entity in list(component.entities):
             await component.async_remove_entity(entity.entity_id)
 
-    counter_component: EntityComponent | None = hass.data.get(DOMAIN, {}).get("counter_component")
-    if counter_component:
-        for entity in list(counter_component.entities):
-            await counter_component.async_remove_entity(entity.entity_id)
+    # Unload sensor platform (removes CounterEntity instances)
+    await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     # Keep domain storage; drop entry-bound runtime.
     hass.data.get(DOMAIN, {}).pop("manager", None)
     hass.data.get(DOMAIN, {}).pop("panel_entry_url", None)
-    hass.data.get(DOMAIN, {}).pop("counter_component", None)
     return True
 
 

@@ -523,6 +523,7 @@ class CounterEntity(SensorEntity):
     """Counts active alerts per level."""
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_state_class = None
 
     def __init__(
         self,
