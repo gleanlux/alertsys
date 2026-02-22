@@ -6,6 +6,7 @@ import logging
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
+from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.const import STATE_UNKNOWN
@@ -21,6 +22,7 @@ from homeassistant.helpers.template import Template, result_as_boolean
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    ALERT_ENTITY_DOMAIN,
     ATTR_ACK,
     ATTR_CONDITION,
     ATTR_LEVEL,
@@ -39,8 +41,10 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 
-class AlertEntity(RestoreEntity):
+class AlertEntity(BinarySensorEntity, RestoreEntity):
     """Represents a single alert in the alertsys domain."""
+
+    _attr_should_poll = False
 
     def __init__(
         self,
@@ -95,12 +99,8 @@ class AlertEntity(RestoreEntity):
         return self._uid
 
     @property
-    def should_poll(self) -> bool:
-        return False
-
-    @property
-    def state(self) -> str:
-        return str(self._active).lower()
+    def is_on(self) -> bool:
+        return self._active
 
     @property
     def icon(self) -> str:
@@ -480,8 +480,8 @@ class AlertEntity(RestoreEntity):
             tpl = Template(template_str, self.hass)
             # Keep 'alert_id' as the object_id part for backward compatibility
             alert_id = ""
-            if self.entity_id and self.entity_id.startswith(f"{DOMAIN}."):
-                alert_id = self.entity_id.replace(f"{DOMAIN}.", "", 1)
+            if self.entity_id and self.entity_id.startswith(f"{ALERT_ENTITY_DOMAIN}."):
+                alert_id = self.entity_id.replace(f"{ALERT_ENTITY_DOMAIN}.", "", 1)
             variables = {
                 "name": self._attr_name,
                 "level": self._level,
@@ -524,6 +524,7 @@ class CounterEntity(SensorEntity):
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_state_class = None
+    _attr_should_poll = False
 
     def __init__(
         self,
@@ -543,10 +544,6 @@ class CounterEntity(SensorEntity):
     @property
     def name(self) -> str:
         return f"AlertSys {self._level.title()} Count"
-
-    @property
-    def should_poll(self) -> bool:
-        return False
 
     @property
     def native_value(self) -> int:

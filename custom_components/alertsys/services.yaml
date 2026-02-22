@@ -11,7 +11,8 @@ quit:
       selector:
         entity:
           filter:
-            domain: alertsys
+            domain: binary_sensor
+            integration: alertsys
 
 ack:
   name: Acknowledge alert
@@ -26,7 +27,8 @@ ack:
       selector:
         entity:
           filter:
-            domain: alertsys
+            domain: binary_sensor
+            integration: alertsys
 
 unack:
   name: Remove acknowledgement
@@ -40,7 +42,8 @@ unack:
       selector:
         entity:
           filter:
-            domain: alertsys
+            domain: binary_sensor
+            integration: alertsys
 
 ack_toggle:
   name: Toggle acknowledgement
@@ -55,4 +58,5 @@ ack_toggle:
       selector:
         entity:
           filter:
-            domain: alertsys
+            domain: binary_sensor
+            integration: alertsys

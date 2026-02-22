@@ -23,6 +23,8 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
 
 from .const import (
+    ALERT_ENTITY_DOMAIN,
+    ALERT_OBJECT_ID_PREFIX,
     AUTO_QUIT_DEFAULTS,
     DEFAULT_CATEGORY_ID,
     DEFAULT_CATEGORY_NAME,
@@ -40,7 +42,8 @@ _LOGGER = logging.getLogger(__name__)
 # -----------------------
 
 _OBJECT_ID_RE = re.compile(r"^[a-z0-9_]+$")
-_ENTITY_ID_RE = re.compile(rf"^{DOMAIN}\.[a-z0-9_]+$")
+_ENTITY_ID_RE = re.compile(rf"^{ALERT_ENTITY_DOMAIN}\.{ALERT_OBJECT_ID_PREFIX}[a-z0-9_]+$")
+
 
 
 def _slugify(text: str) -> str:
@@ -224,7 +227,7 @@ class AlertSysManager:
 
     async def async_get_entity_id(self, alert_uid: str) -> str | None:
         """Get current entity_id for a UID from the entity registry."""
-        return self._registry().async_get_entity_id(DOMAIN, DOMAIN, alert_uid)
+        return self._registry().async_get_entity_id(ALERT_ENTITY_DOMAIN, DOMAIN, alert_uid)
 
     async def async_entity_id_available(self, entity_id: str, exclude_uid: str | None = None) -> bool:
         """Check entity_id availability in the entity registry."""
@@ -232,7 +235,7 @@ class AlertSysManager:
         entry = self._registry().async_get(entity_id)
         if entry is None:
             return True
-        if exclude_uid and entry.domain == DOMAIN and entry.platform == DOMAIN and entry.unique_id == exclude_uid:
+        if exclude_uid and entry.domain == ALERT_ENTITY_DOMAIN and entry.platform == DOMAIN and entry.unique_id == exclude_uid:
             return True
         return False
 
@@ -242,20 +245,20 @@ class AlertSysManager:
         if not _validate_object_id(base):
             base = "alert"
 
-        candidate = base
+        candidate = f"{ALERT_OBJECT_ID_PREFIX}{base}"
         suffix = 1
         while True:
-            entity_id = f"{DOMAIN}.{candidate}"
+            entity_id = f"{ALERT_ENTITY_DOMAIN}.{candidate}"
             if await self.async_entity_id_available(entity_id, exclude_uid=exclude_uid):
                 return entity_id
             suffix += 1
-            candidate = f"{base}_{suffix}"
+            candidate = f"{ALERT_OBJECT_ID_PREFIX}{base}_{suffix}"
 
     async def async_create_registry_entry(self, alert_uid: str, name: str, entity_id: str | None = None, *, strict: bool = False) -> str:
         """Ensure registry entry exists for UID, optionally targeting a specific entity_id."""
         reg = self._registry()
 
-        current = reg.async_get_entity_id(DOMAIN, DOMAIN, alert_uid)
+        current = reg.async_get_entity_id(ALERT_ENTITY_DOMAIN, DOMAIN, alert_uid)
         if current and entity_id is None:
             return current
 
@@ -271,7 +274,7 @@ class AlertSysManager:
             object_id = _object_id_from_entity_id(entity_id)
 
         entry = reg.async_get_or_create(
-            domain=DOMAIN,
+            domain=ALERT_ENTITY_DOMAIN,
             platform=DOMAIN,
             unique_id=alert_uid,
             config_entry=self._config_entry,
@@ -292,7 +295,7 @@ class AlertSysManager:
             raise ValueError("Invalid entity_id format")
 
         reg = self._registry()
-        current = reg.async_get_entity_id(DOMAIN, DOMAIN, alert_uid)
+        current = reg.async_get_entity_id(ALERT_ENTITY_DOMAIN, DOMAIN, alert_uid)
         if current is None:
             # No entry yet; create it
             return await self.async_create_registry_entry(alert_uid, name="Alert", entity_id=new_entity_id, strict=True)
@@ -472,7 +475,7 @@ class AlertSysManager:
 
         # Remove entity registry entry (free up entity_id)
         reg = self._registry()
-        entity_id = reg.async_get_entity_id(DOMAIN, DOMAIN, alert_uid)
+        entity_id = reg.async_get_entity_id(ALERT_ENTITY_DOMAIN, DOMAIN, alert_uid)
         if entity_id:
             reg.async_remove(entity_id)
 
@@ -489,7 +492,7 @@ class AlertSysManager:
         reg = self._registry()
         result: list[dict] = []
         for uid, adef in self.store.alerts.items():
-            entity_id = reg.async_get_entity_id(DOMAIN, DOMAIN, uid)
+            entity_id = reg.async_get_entity_id(ALERT_ENTITY_DOMAIN, DOMAIN, uid)
             result.append({**adef, "id": uid, "entity_id": entity_id})
         return result
 

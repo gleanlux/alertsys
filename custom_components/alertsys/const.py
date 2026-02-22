@@ -1,6 +1,8 @@
 """Constants for the AlertSys integration."""
 
 DOMAIN = "alertsys"
+ALERT_ENTITY_DOMAIN = "binary_sensor"
+ALERT_OBJECT_ID_PREFIX = "alertsys_"
 STORAGE_KEY = f"{DOMAIN}.storage"
 STORAGE_VERSION = 2
 

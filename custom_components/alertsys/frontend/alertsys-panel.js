@@ -368,7 +368,7 @@ class AlertSysPanel extends HTMLElement {
     const entEl = root?.querySelector("#f-entity-id");
     // Entity ID input holds only object_id; domain prefix is fixed in UI.
     const obj = entEl?.value?.trim?.() || entEl?.placeholder?.trim?.() || "";
-    const entity_id = obj ? `alertsys.${obj}` : "alertsys.preview";
+    const entity_id = obj ? `binary_sensor.alertsys_${obj}` : "binary_sensor.alertsys_preview";
     return {
       name,
       level,
@@ -386,7 +386,7 @@ class AlertSysPanel extends HTMLElement {
 
     const name = this.shadowRoot.querySelector("#f-name").value.trim();
     const object_id = this.shadowRoot.querySelector("#f-entity-id").value.trim();
-    const entity_id = object_id ? `alertsys.${object_id}` : "";
+    const entity_id = object_id ? `binary_sensor.alertsys_${object_id}` : "";
     const description = this.shadowRoot.querySelector("#f-description").value.trim();
     const level = this.shadowRoot.querySelector("#f-level").value;
     const condition = this.shadowRoot.querySelector("#f-condition").value.trim();

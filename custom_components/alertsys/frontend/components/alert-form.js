@@ -16,7 +16,7 @@ export function renderAlertForm(panel) {
   const nc = a.notification || {};
 
   const fullEntityId = (a.entity_id || '').trim();
-  const objectId = fullEntityId.startsWith('alertsys.') ? fullEntityId.slice('alertsys.'.length) : (fullEntityId.split('.')[1] || '');
+  const objectId = fullEntityId.startsWith('binary_sensor.alertsys_') ? fullEntityId.slice('binary_sensor.alertsys_'.length) : (fullEntityId.split('.')[1] || '').replace(/^alertsys_/, '');
 
   const aqOverride = a.auto_quit !== null && a.auto_quit !== undefined;
   const aqValue = aqOverride ? !!a.auto_quit : true;
@@ -45,7 +45,7 @@ export function renderAlertForm(panel) {
       <div class="form-field">
         <label>${esc(t("field_entity_id"))}</label>
         <div class="id-input-wrap">
-          <span class="id-prefix">alertsys.</span>
+          <span class="id-prefix">binary_sensor.alertsys_</span>
           <input type="text" id="f-entity-id" value="${esc(objectId || "")}" placeholder="${esc(panel._entityIdPlaceholderObj || "")}" />
           <span class="id-error" id="id-error"></span>
         </div>
@@ -374,7 +374,7 @@ export function bindAlertForm(panel) {
     const condition = root.querySelector("#f-condition")?.value || "";
     const entInput = root.querySelector("#f-entity-id");
     const objectId = entInput?.value?.trim() || entInput?.placeholder?.trim() || "test";
-    const entityId = objectId ? `alertsys.${objectId}` : "alertsys.test";
+    const entityId = objectId ? `binary_sensor.alertsys_${objectId}` : "binary_sensor.alertsys_test";
     return { context_name: name, context_level: level, context_condition: condition, context_entity_id: entityId };
   };
   const parseDataField = (selector) => {
@@ -465,7 +465,7 @@ export function bindAlertForm(panel) {
       const res = await suggestEntityId(panel._hass, name || "Alert", a?._isEdit ? a.id : undefined);
       
       const full = (res.entity_id || '').trim();
-      const obj = full.startsWith('alertsys.') ? full.slice('alertsys.'.length) : (full.split('.')[1] || '');
+      const obj = full.startsWith('binary_sensor.alertsys_') ? full.slice('binary_sensor.alertsys_'.length) : (full.split('.')[1] || '').replace(/^alertsys_/, '');
       panel._entityIdPlaceholderObj = obj;
 
       if (!entInput.value.trim()) {
@@ -514,7 +514,7 @@ export function bindAlertForm(panel) {
     }
 
     try {
-      const res = await checkEntityId(panel._hass, `alertsys.${v}`, isEdit ? a.id : undefined);
+      const res = await checkEntityId(panel._hass, `binary_sensor.alertsys_${v}`, isEdit ? a.id : undefined);
       if (!res.valid) {
         setIdError(t("err_id_invalid"));
         panel._idValid = false;

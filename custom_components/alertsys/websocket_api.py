@@ -15,6 +15,8 @@ from homeassistant.helpers.template import Template
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    ALERT_ENTITY_DOMAIN,
+    ALERT_OBJECT_ID_PREFIX,
     AUTO_QUIT_DEFAULTS,
     DOMAIN,
     NOTIF_DEFAULT_MESSAGE,
@@ -208,8 +210,8 @@ async def ws_entity_id_check(hass, connection, msg):
     try:
         manager = hass.data[DOMAIN]["manager"]
         entity_id = (msg.get("entity_id") or "").strip().lower()
-        # Official form only: alertsys.<object_id>
-        valid = bool(re.fullmatch(rf"{DOMAIN}\.[a-z0-9_]+", entity_id))
+        # Official form only: binary_sensor.alertsys_<object_id>
+        valid = bool(re.fullmatch(rf"{ALERT_ENTITY_DOMAIN}\.{ALERT_OBJECT_ID_PREFIX}[a-z0-9_]+", entity_id))
         if not valid:
             connection.send_result(msg["id"], {
                 "valid": False,
@@ -272,7 +274,7 @@ async def ws_notify_services(hass, connection, msg):
     vol.Optional("context_name", default="Test Alert"): str,
     vol.Optional("context_level", default="info"): str,
     vol.Optional("context_condition", default=""): str,
-    vol.Optional("context_entity_id", default="alertsys.test"): str,
+    vol.Optional("context_entity_id", default="binary_sensor.alertsys_test"): str,
 })
 @websocket_api.async_response
 async def ws_test_notification(hass, connection, msg):
@@ -282,8 +284,8 @@ async def ws_test_notification(hass, connection, msg):
             "name": msg.get("context_name", "Test Alert"),
             "level": msg.get("context_level", "info"),
             "condition": msg.get("context_condition", ""),
-            "entity_id": msg.get("context_entity_id", "alertsys.test"),
-            "alert_id": msg.get("context_entity_id", "alertsys.test").replace("alertsys.", "", 1),
+            "entity_id": msg.get("context_entity_id", "binary_sensor.alertsys_test"),
+            "alert_id": msg.get("context_entity_id", "binary_sensor.alertsys_test").replace("binary_sensor.", "", 1),
             "count": 1,
             "triggered_at": dt_util.utcnow(),
         }

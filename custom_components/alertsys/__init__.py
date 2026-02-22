@@ -13,7 +13,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers.entity_component import EntityComponent
+
 
 from .const import (
     DOMAIN,
@@ -22,7 +22,7 @@ from .const import (
     SERVICE_QUIT,
     SERVICE_UNACK,
 )
-from .entity import AlertEntity
+
 from .store import AlertSysManager, AlertSysStore
 from .websocket_api import async_register_websocket_commands
 
@@ -32,35 +32,36 @@ _LOGGER = logging.getLogger(__name__)
 PANEL_URL_ROOT = f"/{DOMAIN}_panel"
 PANEL_FS_ROOT = str((Path(__file__).resolve().parent / "frontend"))
 
-PLATFORMS = [Platform.SENSOR]
+PLATFORMS = [Platform.BINARY_SENSOR, Platform.SENSOR]
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Set up the AlertSys domain (no YAML config)."""
     hass.data.setdefault(DOMAIN, {})
-
-    # Domain-level registrations (standard HA pattern): do these once here.
-    async_register_websocket_commands(hass)
-
-    await hass.http.async_register_static_paths(
-        [
-            StaticPathConfig(
-                url_path=PANEL_URL_ROOT,
-                path=PANEL_FS_ROOT,
-                cache_headers=False,
-            )
-        ]
-    )
-
-    component = EntityComponent[AlertEntity](_LOGGER, DOMAIN, hass)
-    hass.data[DOMAIN]["component"] = component
-    _register_services(hass, component)
-
     return True
-
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up AlertSys from a config entry."""
+
+    # --- One-time domain-level registrations (guarded, not unloadable) ---
+    if not hass.data[DOMAIN].get("_ws_registered"):
+        async_register_websocket_commands(hass)
+        hass.data[DOMAIN]["_ws_registered"] = True
+
+    if not hass.data[DOMAIN].get("_static_registered"):
+        await hass.http.async_register_static_paths(
+            [
+                StaticPathConfig(
+                    url_path=PANEL_URL_ROOT,
+                    path=PANEL_FS_ROOT,
+                    cache_headers=False,
+                )
+            ]
+        )
+        hass.data[DOMAIN]["_static_registered"] = True
+
+    # --- Entry-bound resources ---
+
     # Initialize store
     store = AlertSysStore(hass)
     await store.async_load()
@@ -69,44 +70,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     manager = AlertSysManager(hass, store, config_entry=entry)
     hass.data[DOMAIN]["manager"] = manager
 
-    # Use the domain-level component created in async_setup
-    component: EntityComponent[AlertEntity] = hass.data[DOMAIN]["component"]
-    domain_platform: Any = getattr(component, "_platforms", {}).get(DOMAIN)
-    if domain_platform is not None:
-        domain_platform.config_entry = entry
-
-    # Forward sensor platform → creates CounterEntity instances via sensor.py
+    # Forward platforms → binary_sensor.py creates AlertEntity, sensor.py creates CounterEntity
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # Provide the add_entities callback to the manager for dynamic CRUD
-    def add_entities_cb(entities):
-        hass.async_create_task(component.async_add_entities(entities))
-
-    manager.set_add_entities_callback(add_entities_cb)
-
-    # Create alert entities from stored definitions
-    alert_entities = []
-    for alert_uid, alert_def in store.alerts.items():
-        # Ensure there is an entity registry entry for this UID
-        try:
-            await manager.async_create_registry_entry(alert_uid, name=alert_def.get("name", "Alert"))
-        except Exception as exc:
-            _LOGGER.warning("Failed to ensure registry entry for %s: %s", alert_uid, exc)
-        effective_aq = manager.resolve_auto_quit(alert_def)
-        entity = AlertEntity(
-            hass=hass,
-            uid=alert_uid,
-            name=alert_def["name"],
-            level=alert_def["level"],
-            condition_config=alert_def["condition"],
-            auto_quit=effective_aq,
-            manager=manager,
-            notification_config=alert_def.get("notification"),
-            description=alert_def.get("description", ""),
-        )
-        alert_entities.append(entity)
-    if alert_entities:
-        await component.async_add_entities(alert_entities)
+    # Register services (entry-bound – removed on unload)
+    _register_services(hass, manager)
 
     # Load entrypoint wrapper as an extra JS module.
     # It defines <ha-panel-alertsys>, which the built-in panel renders.
@@ -130,25 +98,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload AlertSys config entry."""
 
-    # Remove panel (ignore if already gone)
-    frontend.async_remove_panel(hass, DOMAIN, warn_if_unknown=False)
+    # Remove panel
+    frontend.async_remove_panel(hass, DOMAIN)
 
     entry_url = hass.data.get(DOMAIN, {}).get("panel_entry_url")
     if entry_url:
         frontend.remove_extra_js_url(hass, entry_url)
 
-    component: EntityComponent | None = hass.data.get(DOMAIN, {}).get("component")
-    if component:
-        domain_platform: Any = getattr(component, "_platforms", {}).get(DOMAIN)
-        if domain_platform is not None:
-            domain_platform.config_entry = None
-        for entity in list(component.entities):
-            await component.async_remove_entity(entity.entity_id)
-
-    # Unload sensor platform (removes CounterEntity instances)
+    # Unload platforms (removes AlertEntity + CounterEntity instances)
     await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
-    # Keep domain storage; drop entry-bound runtime.
+    # Remove services registered in async_setup_entry
+    for service in (SERVICE_QUIT, SERVICE_ACK, SERVICE_UNACK, SERVICE_ACK_TOGGLE):
+        hass.services.async_remove(DOMAIN, service)
+
+    # Keep domain-level flags (_ws_registered, _static_registered); drop entry-bound runtime.
     hass.data.get(DOMAIN, {}).pop("manager", None)
     hass.data.get(DOMAIN, {}).pop("panel_entry_url", None)
     return True
@@ -157,15 +121,14 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 @callback
 def _register_services(
     hass: HomeAssistant,
-    component: EntityComponent,
+    manager: AlertSysManager,
 ) -> None:
     """Register alertsys services."""
 
-    # quit is special: without entity_id it targets all eligible alerts
     @callback
     def handle_quit(call: ServiceCall) -> None:
         entity_ids = call.data.get("entity_id")
-        alerts = [e for e in component.entities if isinstance(e, AlertEntity)]
+        alerts = manager.alert_entities
 
         if entity_ids:
             if isinstance(entity_ids, str):
@@ -188,9 +151,8 @@ def _register_services(
         }),
     )
 
-    # ack / unack / ack_toggle: explicitly target alert entities (not counters)
     def _resolve_alert_targets(entity_ids):
-        alerts = [e for e in component.entities if isinstance(e, AlertEntity)]
+        alerts = manager.alert_entities
         if isinstance(entity_ids, str):
             entity_ids = [entity_ids]
         return [a for a in alerts if a.entity_id in entity_ids]
@@ -210,6 +172,7 @@ def _register_services(
             ),
         }),
     )
+
     @callback
     def handle_unack(call: ServiceCall) -> None:
         for alert in _resolve_alert_targets(call.data["entity_id"]):
@@ -225,6 +188,7 @@ def _register_services(
             ),
         }),
     )
+    
     @callback
     def handle_ack_toggle(call: ServiceCall) -> None:
         for alert in _resolve_alert_targets(call.data["entity_id"]):
