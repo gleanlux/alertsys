@@ -416,6 +416,8 @@ class AlertEntity(RestoreEntity):
             data = nc.get("data")
             if data:
                 service_data["data"] = data
+            if not self.hass.services.has_service("notify", service_name):
+                continue
 
             try:
                 await self.hass.services.async_call(
