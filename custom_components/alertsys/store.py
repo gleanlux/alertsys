@@ -153,9 +153,17 @@ class AlertSysStore:
 class AlertSysManager:
     """Runtime manager: bridges store, entities, and CRUD operations."""
 
-    def __init__(self, hass: HomeAssistant, store: AlertSysStore) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        store: AlertSysStore,
+        *,
+        config_entry: ConfigEntry,
+    ) -> None:
         self.hass = hass
         self.store = store
+        self._config_entry = config_entry
+
 
         # Runtime entity tracking (populated by entity platform)
         self._alert_entities: dict[str, Any] = {}  # uid -> AlertEntity
@@ -266,6 +274,7 @@ class AlertSysManager:
             domain=DOMAIN,
             platform=DOMAIN,
             unique_id=alert_uid,
+            config_entry=self._config_entry,
             suggested_object_id=object_id,
             original_name=name,
         )

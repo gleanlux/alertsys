@@ -66,11 +66,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await store.async_load()
 
     # Initialize manager
-    manager = AlertSysManager(hass, store)
+    manager = AlertSysManager(hass, store, config_entry=entry)
     hass.data[DOMAIN]["manager"] = manager
 
     # Use the domain-level component created in async_setup
     component: EntityComponent[AlertEntity] = hass.data[DOMAIN]["component"]
+    domain_platform: Any = getattr(component, "_platforms", {}).get(DOMAIN)
+    if domain_platform is not None:
+        domain_platform.config_entry = entry
 
     # Forward sensor platform → creates CounterEntity instances via sensor.py
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -136,6 +139,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     component: EntityComponent | None = hass.data.get(DOMAIN, {}).get("component")
     if component:
+        domain_platform: Any = getattr(component, "_platforms", {}).get(DOMAIN)
+        if domain_platform is not None:
+            domain_platform.config_entry = None
         for entity in list(component.entities):
             await component.async_remove_entity(entity.entity_id)
 
