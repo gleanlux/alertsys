@@ -4,7 +4,7 @@ DOMAIN = "alertsys"
 ALERT_ENTITY_DOMAIN = "binary_sensor"
 ALERT_OBJECT_ID_PREFIX = "alertsys_"
 STORAGE_KEY = f"{DOMAIN}.storage"
-STORAGE_VERSION = 2
+STORAGE_VERSION = 1
 
 # Alert config keys
 CONF_ALERTS = "alerts"

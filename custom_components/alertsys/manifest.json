@@ -4,8 +4,11 @@
   "codeowners": ["@gleanlux"],
   "config_flow": true,
   "dependencies": ["frontend"],
-  "documentation": "https://github.com/gleanlux/ha-alertsys",
+  "requirements": [],
+  "documentation": "https://github.com/gleanlux/alertsys",
   "iot_class": "local_push",
-  "issue_tracker": "https://github.com/gleanlux/ha-alertsys/issues",
+  "issue_tracker": "https://github.com/gleanlux/alertsys/issues",
+  "homeassistant": "2024.1.0",
+  "integration_type": "helper",
   "version": "1.0.0"
 }

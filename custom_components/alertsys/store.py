@@ -329,7 +329,7 @@ class AlertSysManager:
         return new_entity_id
 
     # -------------
-    # CRUD عمليات
+    # CRUD operations
     # -------------
 
     async def async_create_alert(self, data: dict) -> dict:
