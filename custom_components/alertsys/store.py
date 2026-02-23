@@ -21,6 +21,7 @@ import jinja2
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
+from homeassistant.config_entries import ConfigEntry
 
 from .const import (
     ALERT_ENTITY_DOMAIN,

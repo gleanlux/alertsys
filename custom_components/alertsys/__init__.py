@@ -89,7 +89,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         sidebar_title="Alert Manager",
         sidebar_icon="mdi:alert-box-outline",
         frontend_url_path=DOMAIN,  # -> /alertsys
-        require_admin=False,
+        require_admin=True,
     )
 
     return True
