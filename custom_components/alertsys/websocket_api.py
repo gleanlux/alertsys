@@ -7,9 +7,9 @@ import logging
 import re
 from pathlib import Path
 
-import jinja2
 import voluptuous as vol
 from homeassistant.components import websocket_api
+from homeassistant.exceptions import TemplateError
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.template import Template
 from homeassistant.util import dt as dt_util
@@ -343,9 +343,10 @@ async def ws_validate_template(hass, connection, msg):
         if not template_str:
             connection.send_result(msg["id"], {"valid": True})
             return
-        jinja2.Environment().parse(template_str)
+        tpl = Template(template_str, hass)
+        tpl.ensure_valid()
         connection.send_result(msg["id"], {"valid": True})
-    except jinja2.TemplateSyntaxError as exc:
+    except TemplateError as exc:
         connection.send_result(msg["id"], {
             "valid": False,
             "error": str(exc),

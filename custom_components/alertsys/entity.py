@@ -18,7 +18,7 @@ from homeassistant.helpers.event import (
     async_track_time_interval,
 )
 from homeassistant.helpers.restore_state import RestoreEntity
-from homeassistant.helpers.template import Template, result_as_boolean
+from homeassistant.helpers.template import Template, result_as_boolean, is_template_string
 from homeassistant.util import dt as dt_util
 
 from .const import (
@@ -73,7 +73,7 @@ class AlertEntity(BinarySensorEntity, RestoreEntity):
         self._ack = False
 
         # Determine condition type
-        self._is_template = "{{" in condition_config
+        self._is_template = is_template_string(condition_config)
         self._template: Template | None = None
         self._tracked_entity_id: str | None = None
         self._track_template_info = None

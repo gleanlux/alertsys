@@ -17,8 +17,9 @@ import unicodedata
 import uuid
 from typing import Any
 
-import jinja2
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import TemplateError
+from homeassistant.helpers.template import Template, is_template_string
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
 from homeassistant.config_entries import ConfigEntry
@@ -76,16 +77,33 @@ def _object_id_from_entity_id(entity_id: str) -> str:
     return _normalize_entity_id(entity_id).split(".", 1)[1]
 
 
-def _validate_condition(condition: str) -> str | None:
-    """Validate condition string. Returns error message or None if valid."""
+def _validate_condition(condition: str, hass: HomeAssistant | None = None) -> str | None:
+    """Validate condition string. Returns an error message or None if valid.
+
+    If the condition contains a template, validate it using Home Assistant's
+    Template engine (same environment/filters as runtime), not a plain Jinja2
+    parser. This avoids false positives/negatives.
+    """
+    if not condition or not condition.strip():
+        return "Condition must not be empty"
+
+    condition = condition.strip()
     if not condition or not condition.strip():
         return "Condition must not be empty"
     condition = condition.strip()
-    if "{{" in condition:
+
+    if is_template_string(condition):
+        if hass is None:
+            return "Template validation requires Home Assistant instance"
         try:
-            jinja2.Environment().parse(condition)
-        except jinja2.TemplateSyntaxError as exc:
-            return f"Invalid Jinja2 template: {exc}"
+            tpl = Template(condition, hass)
+            tpl.ensure_valid()
+        except TemplateError as exc:
+            return f"Invalid template: {exc}"
+        except Exception as exc:  # safety net
+            _LOGGER.debug("Failed to validate template condition: %s", exc)
+            return "Invalid template"
+
     return None
 
 
@@ -327,7 +345,7 @@ class AlertSysManager:
             raise ValueError(f"Invalid level: {level!r}")
 
         condition = data.get("condition", "")
-        err = _validate_condition(condition)
+        err = _validate_condition(condition, self.hass)
         if err:
             raise ValueError(err)
 
@@ -397,7 +415,7 @@ class AlertSysManager:
             raise ValueError(f"Invalid level: {level!r}")
 
         condition = data.get("condition", existing["condition"])
-        err = _validate_condition(condition)
+        err = _validate_condition(condition, self.hass)
         if err:
             raise ValueError(err)
 
