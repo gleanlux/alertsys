@@ -3,11 +3,11 @@
   "name": "AlertSys",
   "codeowners": ["@gleanlux"],
   "config_flow": true,
-  "dependencies": ["frontend","http"],
+  "dependencies": ["frontend", "http"],
   "documentation": "https://github.com/gleanlux/alertsys",
+  "integration_type": "service",
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/gleanlux/alertsys/issues",
-  "integration_type": "service",
   "requirements": [],
   "version": "1.0.0"
 }
