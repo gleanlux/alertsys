@@ -88,9 +88,6 @@ def _validate_condition(condition: str, hass: HomeAssistant | None = None) -> st
         return "Condition must not be empty"
 
     condition = condition.strip()
-#    if not condition or not condition.strip():
-#        return "Condition must not be empty"
-#    condition = condition.strip()
 
     if is_template_string(condition):
         if hass is None:
