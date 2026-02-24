@@ -3,12 +3,11 @@
   "name": "AlertSys",
   "codeowners": ["@gleanlux"],
   "config_flow": true,
-  "dependencies": ["frontend"],
+  "dependencies": ["frontend","http"],
   "requirements": [],
   "documentation": "https://github.com/gleanlux/alertsys",
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/gleanlux/alertsys/issues",
-  "homeassistant": "2024.1.0",
   "integration_type": "service",
   "version": "1.0.0"
 }

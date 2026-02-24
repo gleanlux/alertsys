@@ -14,6 +14,7 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.helpers import config_validation as cv
 
+
 _INTEGRATION_VERSION = json.loads(
     (Path(__file__).parent / "manifest.json").read_text()
 ).get("version", "0")
@@ -26,6 +27,8 @@ from .const import (
     SERVICE_QUIT,
     SERVICE_UNACK,
 )
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 from .store import AlertSysManager, AlertSysStore
 from .websocket_api import async_register_websocket_commands

@@ -421,38 +421,31 @@ async def ws_get_translations(hass, connection, msg):
     try:
         language = msg.get("language") or hass.config.language
         
-        # Get the integration directory
+        # Panel translations live in frontend/translations/
         integration_dir = Path(__file__).parent
-        translation_file = integration_dir / "translations" / f"{language}.json"
+        translation_file = integration_dir / "frontend" / "translations" / f"{language}.json"
         
         # Fallback to English if language file not found
         if not translation_file.exists():
             _LOGGER.debug(
-                "Translation file not found for '%s', falling back to English",
+                "Panel translation file not found for '%s', falling back to English",
                 language
             )
             language = "en"
-            translation_file = integration_dir / "translations" / "en.json"
+            translation_file = integration_dir / "frontend" / "translations" / "en.json"
         
         # Load and parse the translation file in executor (non-blocking I/O)
         if translation_file.exists():
-            translations = await hass.async_add_executor_job(
+            panel_strings = await hass.async_add_executor_job(
                 _read_json_file, translation_file
             )
             
-            # Extract panel section
-            panel_strings = translations.get("panel", {})
-            
             if not panel_strings:
                 _LOGGER.warning(
-                    "No 'panel' section found in translation file for '%s'",
-                    language
+                    "Panel translation file is empty for '%s'", language
                 )
         else:
-            _LOGGER.error(
-                "Translation file not found: %s",
-                translation_file
-            )
+            _LOGGER.error("Panel translation file not found: %s", translation_file)
             panel_strings = {}
         
         _LOGGER.debug(
