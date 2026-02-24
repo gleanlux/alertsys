@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-import time
+import json
 from pathlib import Path
 
 import voluptuous as vol
@@ -13,6 +13,10 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.helpers import config_validation as cv
+
+_INTEGRATION_VERSION = json.loads(
+    (Path(__file__).parent / "manifest.json").read_text()
+).get("version", "0")
 
 
 from .const import (
@@ -78,7 +82,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Load entrypoint wrapper as an extra JS module.
     # It defines <ha-panel-alertsys>, which the built-in panel renders.
-    entry_url = f"{PANEL_URL_ROOT}/entrypoint.js?v={int(time.time())}"
+    entry_url = f"{PANEL_URL_ROOT}/entrypoint.js?v={_INTEGRATION_VERSION}"
     frontend.add_extra_js_url(hass, entry_url)
     hass.data[DOMAIN]["panel_entry_url"] = entry_url
 

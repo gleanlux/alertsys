@@ -565,3 +565,7 @@ class CounterEntity(SensorEntity):
     async def async_added_to_hass(self) -> None:
         """Register with manager."""
         self._manager.register_counter_entity(self._level, self)
+    
+    async def async_will_remove_from_hass(self) -> None:
+        """Unregister from manager to prevent stale references after reload."""
+        self._manager._counter_entities.pop(self._level, None)

@@ -88,9 +88,9 @@ def _validate_condition(condition: str, hass: HomeAssistant | None = None) -> st
         return "Condition must not be empty"
 
     condition = condition.strip()
-    if not condition or not condition.strip():
-        return "Condition must not be empty"
-    condition = condition.strip()
+#    if not condition or not condition.strip():
+#        return "Condition must not be empty"
+#    condition = condition.strip()
 
     if is_template_string(condition):
         if hass is None:
@@ -451,7 +451,10 @@ class AlertSysManager:
         self.store.cleanup_empty_categories()
         await self.store.async_save()
 
-        # Recreate entity (simple and robust)
+        # Recreate entity on update (simple and robust).
+        # In-place update would preserve _active/_ack state across edits,
+        # but the added complexity is not justified: alert edits are rare,
+        # intentional admin actions, not triggered during normal operation.
         old_entity = self._alert_entities.get(alert_uid)
         if old_entity:
             await old_entity.async_remove()
