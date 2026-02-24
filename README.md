@@ -160,6 +160,92 @@ Example notification data:
 }
 ```
 
+## Example auto visualisation for all alerts:
+```jinja2
+type: custom:auto-entities
+card:
+  type: vertical-stack
+card_param: cards
+show_empty: true
+sort:
+  reverse: false
+  numeric: false
+  ignore_case: false
+  ip: false
+  method: last_changed
+filter:
+  include:
+    - options:
+        type: custom:mushroom-template-card
+        entity: this.entity_id
+        primary: |
+          {{ state_attr(entity, 'friendly_name') }}
+        icon: |-
+          {% if state_attr(entity, 'ack') == true %}
+            mdi:pause-circle-outline
+          {% else%}
+            {{ state_attr(entity, 'icon') }}
+          {% endif %}
+        icon_color: |-
+          {% if state_attr(entity, 'ack') == true %}
+            blue
+          {% elif state_attr(entity, 'level') == "error" %}
+            #db4437
+          {% elif state_attr(entity, 'level') == "warning" %}
+            #ffa600
+          {% elif state_attr(entity, 'level') == "info" %}
+            blue
+          {% endif %}
+        secondary: |
+          {{ state_attr(entity, 'description') }}
+        grid_options:
+          columns: full
+          rows: 1
+        tap_action:
+          action: more-info
+        hold_action:
+          action: perform-action
+          perform_action: alertsys.ack_toggle
+          data:
+            entity_id: this.entity_id
+        double_tap_action:
+          action: none
+        badge_icon: |-
+          {% if state_attr(entity, 'auto_quit') == false %}
+            {% if state_attr(entity, 'condition') == true %}
+              mdi:close
+            {% else %}
+              mdi:check
+            {% endif %}
+          {% endif %}
+        badge_color: |-
+          {% if state_attr(entity, 'condition') == true %}
+            #db4437
+          {% else %}
+            green
+          {% endif %}
+        card_mod:
+          style:
+            mushroom-shape-icon$: |
+              .shape {
+                background: transparent !important;
+              }
+            .: |
+              ha-card {
+                {% set level = state_attr(config.entity, 'level') %}
+                {% if level == "error" %}
+                  background: rgba(var(--rgb-error-color), 0.3);
+                {% elif level == "warning" %}
+                  background: rgba(var(--rgb-warning-color), 0.3);
+                {% elif level == "info" %}
+                  background: rgba(var(--rgb-info-color), 0.3);
+                {% endif %}
+              }
+      integration: alertsys
+      domain: binary_sensor
+      state: "on"
+```
+
 ## Troubleshooting
 
 Panel shows but actions fail → use an admin account (WebSocket CRUD is admin-only).
