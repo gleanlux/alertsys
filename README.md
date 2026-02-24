@@ -14,6 +14,7 @@ It also adds an **“Alert Manager”** panel to the HA sidebar for creating and
     - `level`: `info` / `warning` / `error`
     - `condition`: `true` / `false` (whether the trigger is currently active)
     - `ack`: `true` / `false` (acknowledged / muted)
+    - `description`: (255char custom description for alerts)
 - **Two-stage lifecycle** (the workflow most people want):
   - Trigger becomes active → alert becomes **active**
   - Trigger clears → alert can either **auto-quit** (reset) or remain active until manually **quit**
@@ -32,7 +33,17 @@ It also adds an **“Alert Manager”** panel to the HA sidebar for creating and
 
 > Note: Alert management WebSocket commands are **admin-only**. You’ll need an admin user to create/update/delete alerts and to use the panel fully.
 
+> For the full user experience, we recommend using the `Mushroom`, `auto-entities`, and `card-mod` add-ons for visual display.
+> Sample code at the bottom of the description.
+
 ---
+## Preview
+Automatic visualisation alerts by recommended addons:
+<img width="631" height="270" alt="image" src="https://github.com/user-attachments/assets/bc84fb11-72d6-48c9-a630-bfaf3e2e51c2" />
+
+<img width="1013" height="581" alt="image" src="https://github.com/user-attachments/assets/2804ce55-244a-4361-a0c0-0d7dc245bdb3" />
+
+
 
 ## Installation
 
@@ -67,6 +78,13 @@ After setup, you’ll get a sidebar entry:
 ## Creating an alert
 
 Open **Alert Manager → + New Alert** and fill:
+
+### Name
+The alert's 'friendly name' 
+
+### Entity ID (OPTIONAL)
+If you leave the field blank, the Entity ID will be automatically generated from the friendly name!
+The parameter can be freely modified and is equipped with collision protection.
 
 ### Condition
 You can use either:
@@ -131,6 +149,15 @@ When templating notification title/message, these variables are available:
 Example title:
 ```jinja2
 AlertSys {{ level | upper }}: {{ name }}
+```
+
+Example notification data:
+```jinja2
+{
+"ttl": 0,
+"priority":"high",
+"channel":"alarm_stream"
+}
 ```
 
 ## Troubleshooting
