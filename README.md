@@ -39,7 +39,11 @@ It also adds an **“Alert Manager”** panel to the HA sidebar for creating and
 ---
 ## Preview
 Automatic visualisation alerts by recommended addons:
+
 <img width="631" height="270" alt="image" src="https://github.com/user-attachments/assets/bc84fb11-72d6-48c9-a630-bfaf3e2e51c2" />
+
+
+UI alert management interface:
 
 <img width="1013" height="581" alt="image" src="https://github.com/user-attachments/assets/2804ce55-244a-4361-a0c0-0d7dc245bdb3" />
 
@@ -110,6 +114,15 @@ Default behavior by level:
 - `error`: auto-quit **off**
 
 You can override per alert in the UI.
+
+### Categories
+When managing alerts, you can assign each alert to an existing category or create a new one.
+
+You cannot edit or delete a category.
+If you want to modify a category, create the new category you want and move the alerts into it.
+
+Categories that do not contain any alerts are automatically deleted.
+
 
 ---
 
@@ -245,6 +258,103 @@ filter:
       domain: binary_sensor
       state: "on"
 ```
+## Dynamic description
+If you want to display dynamic data in the description, use the following secondary field code:
+
+```jinja2
+secondary: >
+          {% set desc = state_attr(entity, 'description') | default('', true) %}
+          {% set data = desc | from_json(None) %}
+
+          {% if (data is mapping and data.p is defined) or (data is sequence and
+          data is not string) %}
+            {% set base = (data.b if data is mapping and data.b is defined else '') | default('', true) %}
+            {% set parts = (data.p if data is mapping else data) %}
+            {% set out = namespace(text='') %}
+
+            {% for part in parts %}
+              {# TEXT: {"t":"..."} #}
+              {% if part is mapping and part.t is defined %}
+                {% set out.text = out.text ~ (part.t | default('', true)) %}
+
+              {# ENTITY: {"ei":"...", "r":1, "u":1} #}
+              {% elif part is mapping and part.ei is defined %}
+                {% set eid = (part.ei | string) %}
+                {% if base and '.' not in eid %}
+                  {% set eid = base ~ eid %}
+                {% endif %}
+
+                {% set r = part.r if part.r is defined else none %}
+                {% set u = (part.u if part.u is defined else 1) | int %}
+                {% set fb = part.fb if part.fb is defined else '—' %}
+
+                {% set raw = states(eid, rounded=false, with_unit=false) %}
+                {% if raw in ['unknown','unavailable','none',''] %}
+                  {% set out.text = out.text ~ fb %}
+                {% else %}
+                  {% set val = raw %}
+                  {% if r is not none %}
+                    {% set num = raw | float(none) %}
+                    {% if num is not none %}
+                      {% set val = num | round(r) %}
+                    {% endif %}
+                  {% endif %}
+
+                  {% set val = val | string %}
+
+                  {% if u %}
+                    {% set unit = state_attr(eid, 'unit_of_measurement') %}
+                    {% if unit %}
+                      {% set val = val ~ ' ' ~ unit %}
+                    {% endif %}
+                  {% endif %}
+
+                  {% set out.text = out.text ~ val %}
+                {% endif %}
+              {% endif %}
+            {% endfor %}
+
+            {{ out.text }}
+          {% else %}
+            {{ desc }}
+          {% endif %}
+```
+
+After that, the alert description can be used as follows:
+
+Example 1:
+```jinja2
+{"p":[
+{"t":"Incoming water pressure too low: "},
+{"ei":"sensor.gleantemp_pressure","r":1}
+]}
+```
+
+Example 2 (if you need multiple similar sensors, then:):
+```jinja2
+{"b":"sensor.gleansmartmeter_voltage_","p":[
+{"t":"Low voltage! L1: "},{"ei":"l1","r":0},
+{"t":" - L2: "},{"ei":"l2","r":0},
+{"t":" - L3: "},{"ei":"l3","r":0}
+]}
+```
+
+Example 3 (string value sensor):
+```jinja2
+{"p":[
+{"t":"Detected dock error is: "},
+{"ei":"sensor.roborock_s7_maxv_dock_dock_error"}
+]}
+```
+
+Where:
+- "p" = part
+- "t" = text
+- "ei" = entity
+- "r" = round
+- "b" = base
+
+> Note: In addition to using the new secondary field, plain text descriptions can also be provided, the code will handle it if it receives a plain string value.
 
 ## Troubleshooting
 
