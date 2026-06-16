@@ -38,14 +38,27 @@ It also adds an **“Alert Manager”** panel to the HA sidebar for creating and
 
 ---
 ## Preview
-Automatic visualisation alerts by recommended addons:
+**Automatic visualisation alerts by recommended addons:**
+<br>
+<br>
+<img width="608" height="293" alt="image" src="https://github.com/user-attachments/assets/a30e2b62-e544-49c3-8c26-477d44e64a60" />
 
-<img width="631" height="270" alt="image" src="https://github.com/user-attachments/assets/bc84fb11-72d6-48c9-a630-bfaf3e2e51c2" />
+<br>
+<br>
 
+**UI alert management interface:**
+<br>
+<br>
+<img width="700" alt="Képkivágás" src="https://github.com/user-attachments/assets/0bf33dc3-434c-442c-9b51-7ddd218643d9" />
 
-UI alert management interface:
+<br>
+<br>
 
-<img width="1013" height="581" alt="image" src="https://github.com/user-attachments/assets/2804ce55-244a-4361-a0c0-0d7dc245bdb3" />
+**Editor:**
+<br>
+<br>
+<img width="700" alt="image" src="https://github.com/user-attachments/assets/a6d3be80-9441-46ee-b531-daf6464a3c21" />
+<br>
 
 
 
