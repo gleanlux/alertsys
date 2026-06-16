@@ -104,7 +104,7 @@ export const STYLES = `
         container-name: alertsys-list;
       }
 
-      @container alertsys-list (max-width: 899px) {
+      @container alertsys-list (max-width: 699px) {
         .alert-condition {
           display: none;
         }
