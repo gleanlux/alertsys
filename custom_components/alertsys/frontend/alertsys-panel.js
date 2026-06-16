@@ -27,6 +27,8 @@ class AlertSysPanel extends HTMLElement {
     super();
     this.attachShadow({ mode: "open" });
     this._hass = null;
+    this._panel = null;
+    this._narrow = false;
     this._alerts = [];
     this._categories = [];
     this._editingAlert = null; // null = list view, {} = new, {id:...} = editing
@@ -87,6 +89,7 @@ class AlertSysPanel extends HTMLElement {
     const newConn = hass?.connection;
     const langChanged = this._hass && this._hass.language !== hass.language;
     this._hass = hass;
+    this._updateHaHeaderProps();
     // (Re)attach WS connection listeners when connection object changes
     if (newConn && newConn !== oldConn) {
       this._detachConnectionListeners();
@@ -113,6 +116,11 @@ class AlertSysPanel extends HTMLElement {
     this._panel = panel;
   }
 
+  set narrow(narrow) {
+    this._narrow = !!narrow;
+    this._updateHaHeaderProps();
+  }
+
   connectedCallback() {
     this._connected = true;
     // Ensure WS connection listeners are attached
@@ -129,6 +137,7 @@ class AlertSysPanel extends HTMLElement {
     if (this._hass && this._loaded && !this.shadowRoot.querySelector(".panel")) {
       this._loadData();
     }
+    this._updateHaHeaderProps();
   }
 
   disconnectedCallback() {
@@ -280,12 +289,8 @@ class AlertSysPanel extends HTMLElement {
   }
 
   _renderError(message) {
-    this.shadowRoot.innerHTML = `
-      <style>${STYLES}</style>
+    this._renderShell(`
       <div class="panel">
-        <div class="toolbar">
-          <h1>${this._esc(this._t("title"))}</h1>
-        </div>
         <div class="list-container">
           <div class="empty-state" style="color: var(--error-color, #db4437);">
             ${this._esc(message)}
@@ -293,7 +298,7 @@ class AlertSysPanel extends HTMLElement {
             <button class="primary-btn" id="btn-retry">${this._esc(this._t("btn_retry"))}</button>
           </div>
         </div>
-      </div>`;
+      </div>`);
   }
 
   _getGrouped() {
@@ -327,19 +332,40 @@ class AlertSysPanel extends HTMLElement {
 
     // List view
     if (this._editingAlert === null) {
-      this.shadowRoot.innerHTML = `
-        <style>${STYLES}</style>
-        ${renderList(this)}
-      `;
+      this._renderShell(renderList(this));
       return;
     }
 
     // Editor view
+    this._renderShell(renderEditor(this));
+    bindEditor(this);
+  }
+
+  _renderShell(content) {
     this.shadowRoot.innerHTML = `
       <style>${STYLES}</style>
-      ${renderEditor(this)}
+      <div class="toolbar">
+        <div class="toolbar-content">
+          <ha-menu-button></ha-menu-button>
+          <div class="main-title">${this._esc(this._t("title"))}</div>
+        </div>
+      </div>
+      <main class="main-content">
+        ${content}
+      </main>
     `;
-    bindEditor(this);
+
+    this._updateHaHeaderProps();
+  }
+
+  _updateHaHeaderProps() {
+    this.toggleAttribute("narrow", !!this._narrow);
+
+    const menuButton = this.shadowRoot?.querySelector("ha-menu-button");
+    if (!menuButton) return;
+
+    menuButton.hass = this._hass;
+    menuButton.narrow = this._narrow;
   }
 
   // Form rendering moved to views/editor.js + components/alert-form.js

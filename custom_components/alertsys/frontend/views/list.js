@@ -28,8 +28,7 @@ export function renderList(panel) {
 
   return `
     <div class="panel">
-      <div class="toolbar">
-        <h1>${esc(t("title"))}</h1>
+      <div class="content-toolbar">
         <button id="btn-new" class="primary-btn">${esc(t("btn_new"))}</button>
       </div>
       <div class="list-container">
