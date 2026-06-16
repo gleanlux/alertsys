@@ -16,7 +16,7 @@ export function renderList(panel) {
     listHtml += `
       <div class="category-group" data-cat="${catId}">
         <div class="category-header" data-cat="${catId}">
-          <span class="collapse-icon">▼</span>
+          <ha-icon class="collapse-icon" icon="mdi:chevron-down"></ha-icon>
           <strong>${esc(group.name)}</strong>
           <span class="badge">${(group.alerts || []).length}</span>
         </div>
@@ -54,6 +54,20 @@ export async function handleListClick(panel, e) {
     return true;
   }
 
+  // Expand/collapse long condition code
+  const condition = e.target.closest(".alert-condition.has-overflow");
+  if (condition) {
+    e.stopPropagation();
+    const expanded = condition.classList.toggle("expanded");
+    condition.setAttribute("aria-expanded", expanded ? "true" : "false");
+
+    const icon = condition.querySelector(".condition-expand-icon");
+    if (icon) {
+      icon.icon = expanded ? "mdi:chevron-up" : "mdi:chevron-down";
+    }
+    return true;
+  }
+
   // Toggle category collapse
   const header = e.target.closest(".category-header");
   if (header && !e.target.closest(".alert-menu-wrap")) {
@@ -62,10 +76,10 @@ export async function handleListClick(panel, e) {
     if (body && icon) {
       if (body.style.display === "none") {
         body.style.display = "";
-        icon.textContent = "▼";
+        icon.icon = "mdi:chevron-down";
       } else {
         body.style.display = "none";
-        icon.textContent = "▶";
+        icon.icon = "mdi:chevron-right";
       }
     }
     return true;

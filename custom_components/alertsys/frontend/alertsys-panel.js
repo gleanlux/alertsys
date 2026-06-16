@@ -333,6 +333,7 @@ class AlertSysPanel extends HTMLElement {
     // List view
     if (this._editingAlert === null) {
       this._renderShell(renderList(this));
+      this._updateConditionOverflow();
       return;
     }
 
@@ -356,6 +357,25 @@ class AlertSysPanel extends HTMLElement {
     `;
 
     this._updateHaHeaderProps();
+  }
+
+  _updateConditionOverflow() {
+    requestAnimationFrame(() => {
+      const conditions = this.shadowRoot?.querySelectorAll(".alert-condition") || [];
+
+      for (const condition of conditions) {
+        const code = condition.querySelector("code");
+        const icon = condition.querySelector(".condition-expand-icon");
+        if (!code) continue;
+
+        condition.classList.remove("has-overflow", "expanded");
+        condition.setAttribute("aria-expanded", "false");
+        if (icon) icon.icon = "mdi:chevron-down";
+
+        const hasOverflow = code.scrollHeight > code.clientHeight + 1;
+        condition.classList.toggle("has-overflow", hasOverflow);
+      }
+    });
   }
 
   _updateHaHeaderProps() {

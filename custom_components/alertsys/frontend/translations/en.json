@@ -11,6 +11,7 @@
     "btn_update": "Update",
     "btn_cancel": "Cancel",
     "btn_add_target": "+ Add",
+    "btn_add_template": "Add template",
     "btn_create_category": "+ Create new...",
     "btn_test_alert": "Test alert notification",
     "btn_test_resolve": "Test resolve notification",

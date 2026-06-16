@@ -22,7 +22,10 @@ export function renderAlertRow({ alert, t, esc, autoQuitDefaults }) {
       <ha-icon icon="${lm.icon}" style="color:${lm.color}; --mdc-icon-size:22px; flex-shrink:0;"></ha-icon>
       <div class="alert-main">
         <span class="alert-name">${esc(alert.name)}</span>
-        <span class="alert-condition"><code>${esc(alert.condition)}</code></span>
+        <span class="alert-condition" title="${esc(alert.condition)}">
+          <ha-icon class="condition-expand-icon" icon="mdi:chevron-down"></ha-icon>
+          <code>${esc(alert.condition)}</code>
+        </span>
       </div>
       <span class="alert-autoquit${!aqOverride ? " is-default" : ""}" title="${esc(aqTitle)}">
         <ha-icon icon="${aqIcon}" style="--mdc-icon-size:18px;"></ha-icon>

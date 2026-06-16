@@ -154,7 +154,12 @@ export function renderAlertForm(panel) {
         </div>
 
         <div class="form-field">
-          <label>${esc(t("field_data"))}</label>
+          <div class="field-label-row">
+            <label>${esc(t("field_data"))}</label>
+            <button type="button" class="template-link" data-template-target="f-notif-data">
+              ${esc(t("btn_add_template"))}
+            </button>
+          </div>
           <textarea id="f-notif-data" rows="5" placeholder='${esc(
     t("ph_data_json")
   )}'>${nc.data ? JSON.stringify(nc.data, null, 2) : ""}</textarea>
@@ -208,7 +213,12 @@ export function renderAlertForm(panel) {
             <div class="tpl-status" id="tpl-status-resolve-message"></div>
           </div>
           <div class="form-field">
-            <label>${esc(t("field_resolve_data"))}</label>
+            <div class="field-label-row">
+              <label>${esc(t("field_resolve_data"))}</label>
+              <button type="button" class="template-link" data-template-target="f-notif-resolve-data">
+                ${esc(t("btn_add_template"))}
+              </button>
+            </div>
             <textarea id="f-notif-resolve-data" rows="5" placeholder='${esc(
     t("ph_data_json")
   )}'>${nc.resolve_data ? JSON.stringify(nc.resolve_data, null, 2) : ""}</textarea>
@@ -236,10 +246,52 @@ export function bindAlertForm(panel) {
   const root = panel.shadowRoot;
   const t = panel._t.bind(panel);
 
+  const autoResizeTextarea = (el) => {
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  };
+
+  const bindAutoResizeTextarea = (el) => {
+    if (!el) return;
+    el.addEventListener("input", () => autoResizeTextarea(el));
+    requestAnimationFrame(() => autoResizeTextarea(el));
+  };
+
+  const resizeAutoTextareas = () => {
+    [
+      "#f-description",
+      "#f-condition",
+      "#f-notif-message",
+      "#f-notif-data",
+      "#f-notif-resolve-msg",
+      "#f-notif-resolve-data",
+    ].forEach((selector) => autoResizeTextarea(root.querySelector(selector)));
+  };
+
+  const insertTextareaTemplate = (id) => {
+    const el = root.querySelector(`#${CSS.escape(id)}`);
+    if (!el || el.value.trim()) return;
+
+    const template = el.getAttribute("placeholder") || "";
+    if (!template.trim()) return;
+
+    el.value = template;
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    autoResizeTextarea(el);
+    requestAnimationFrame(() => autoResizeTextarea(el));
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  };
+
   // Basic nav/actions
   root.querySelector("#btn-back")?.addEventListener("click", () => panel._closeForm());
   root.querySelector("#btn-cancel")?.addEventListener("click", () => panel._closeForm());
   root.querySelector("#btn-save")?.addEventListener("click", () => panel._saveAlert());
+
+  root.querySelectorAll(".template-link").forEach((btn) => {
+    btn.addEventListener("click", () => insertTextareaTemplate(btn.dataset.templateTarget));
+  });
 
   // Auto-quit override toggle + hint
   const aqOvr = root.querySelector("#f-aq-override");
@@ -283,6 +335,7 @@ export function bindAlertForm(panel) {
   notifEnabled?.addEventListener("change", () => {
     if (!notifConfig) return;
     notifConfig.style.display = notifEnabled.checked ? "block" : "none";
+    requestAnimationFrame(resizeAutoTextareas);
     panel._updateSaveBtn?.();
   });
 
@@ -364,6 +417,7 @@ export function bindAlertForm(panel) {
   resolveChk?.addEventListener("change", () => {
     if (!resolveWrap) return;
     resolveWrap.style.display = resolveChk.checked ? "block" : "none";
+    requestAnimationFrame(resizeAutoTextareas);
     panel._updateSaveBtn?.();
   });
 
@@ -544,6 +598,16 @@ export function bindAlertForm(panel) {
   // Condition live preview (unified template validator/renderer)
   const condInput = root.querySelector("#f-condition");
   const condStatus = root.querySelector("#condition-preview");
+
+  [
+    "#f-description",
+    "#f-condition",
+    "#f-notif-message",
+    "#f-notif-data",
+    "#f-notif-resolve-msg",
+    "#f-notif-resolve-data",
+  ].forEach((selector) => bindAutoResizeTextarea(root.querySelector(selector)));
+
   if (condInput && condStatus) {
     const cleanup = bindTemplateStatus({
       hass: panel._hass,
