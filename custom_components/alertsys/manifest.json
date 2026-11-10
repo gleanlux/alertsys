@@ -1,9 +1,9 @@
 {
   "domain": "alertsys",
   "name": "AlertSys",
+  "categories": ["messaging_notifications","security_safety"],
   "codeowners": ["@gleanlux"],
   "config_flow": true,
-  "categories": ["messaging_notifications","security_safety"],
   "dependencies": ["frontend", "http"],
   "documentation": "https://github.com/gleanlux/alertsys",
   "integration_type": "service",
